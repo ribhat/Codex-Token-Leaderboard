@@ -28,11 +28,12 @@ Create these database files:
 Create these web files:
 
 - `apps/web/package.json`: Next.js app dependencies and scripts.
+- `apps/web/next-env.d.ts`: Next.js generated environment types.
 - `apps/web/next.config.ts`: Next.js config.
 - `apps/web/tsconfig.json`: TypeScript config.
 - `apps/web/vitest.config.ts`: Vitest config.
 - `apps/web/src/app/layout.tsx`: root HTML layout.
-- `apps/web/src/app/page.tsx`: dashboard page.
+- `apps/web/src/app/page.tsx`: Task 1 scaffold page; Task 8 replaces it with the dashboard shell.
 - `apps/web/src/app/globals.css`: application styles.
 - `apps/web/src/app/api/groups/route.ts`: `POST /api/groups`.
 - `apps/web/src/app/api/groups/join/route.ts`: `POST /api/groups/join`.
@@ -55,13 +56,14 @@ Create these web files:
 - `apps/web/src/test/groupService.test.ts`: group service tests.
 - `apps/web/src/test/collectorService.test.ts`: collector service tests.
 - `apps/web/src/test/leaderboardService.test.ts`: range, masking, and stale tests.
+- `apps/web/src/test/page.test.tsx`: Task 1 scaffold smoke test.
 - `apps/web/src/test/Dashboard.test.tsx`: basic UI tests.
 - `apps/web/src/test/testData.ts`: reusable fixtures.
 
 Create these collector files:
 
 - `collector/go.mod`: Go module metadata.
-- `collector/main.go`: CLI entry point.
+- `collector/main.go`: Task 1 stdlib-only CLI placeholder; Task 10 wires it to Cobra commands.
 - `collector/internal/config/config.go`: local config read/write.
 - `collector/internal/codex/events.go`: JSONL event parser.
 - `collector/internal/codex/discover.go`: Codex session discovery.
@@ -88,12 +90,15 @@ Create these collector files:
 - Create: `.gitignore`
 - Create: `README.md`
 - Create: `apps/web/package.json`
+- Create: `apps/web/next-env.d.ts`
 - Create: `apps/web/next.config.ts`
 - Create: `apps/web/tsconfig.json`
 - Create: `apps/web/vitest.config.ts`
 - Create: `apps/web/src/app/layout.tsx`
 - Create: `apps/web/src/app/page.tsx`
 - Create: `apps/web/src/app/globals.css`
+- Create: `apps/web/src/test/setup.ts`
+- Create: `apps/web/src/test/page.test.tsx`
 - Create: `collector/go.mod`
 - Create: `collector/main.go`
 
@@ -132,6 +137,7 @@ dist/
 bin/
 *.exe
 *.test
+.worktrees/
 .superpowers/
 ```
 
@@ -180,7 +186,7 @@ Write `apps/web/package.json`:
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "lint": "next lint",
+    "lint": "tsc --noEmit --incremental false",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -205,6 +211,17 @@ Write `apps/web/package.json`:
     "jsdom": "latest"
   }
 }
+```
+
+Write `apps/web/next-env.d.ts`:
+
+```ts
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+import "./.next/types/routes.d.ts";
+
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.
 ```
 
 Write `apps/web/next.config.ts`:
@@ -233,14 +250,14 @@ Write `apps/web/tsconfig.json`:
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "incremental": true,
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", ".next/dev/types/**/*.ts"],
   "exclude": ["node_modules"]
 }
 ```
@@ -295,11 +312,30 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 Write `apps/web/src/app/page.tsx`:
 
 ```tsx
-import { Dashboard } from "@/components/Dashboard";
-
 export default function HomePage() {
-  return <Dashboard />;
+  return (
+    <main>
+      <h1>Codex Token Leaderboard</h1>
+      <p>Privacy-first friend leaderboard for local Codex token usage.</p>
+    </main>
+  );
 }
+```
+
+Write `apps/web/src/test/page.test.tsx`:
+
+```tsx
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import HomePage from "../app/page";
+
+describe("HomePage", () => {
+  it("renders the scaffold title", () => {
+    render(<HomePage />);
+
+    expect(screen.getByRole("heading", { name: "Codex Token Leaderboard" })).toBeInTheDocument();
+  });
+});
 ```
 
 Write `apps/web/src/app/globals.css`:
@@ -381,16 +417,10 @@ Write `collector/main.go`:
 ```go
 package main
 
-import (
-	"os"
-
-	"github.com/codex-token-leaderboard/collector/internal/cmd"
-)
+import "fmt"
 
 func main() {
-	if err := cmd.Execute(); err != nil {
-		os.Exit(1)
-	}
+	fmt.Println("codex-token-leaderboard collector scaffold")
 }
 ```
 
@@ -405,6 +435,8 @@ go mod tidy
 ```
 
 Expected: dependency installation succeeds and creates `package-lock.json` plus `collector/go.sum`.
+
+Note: `collector/main.go` remains stdlib-only in Task 1 so the repository compiles before `collector/internal/cmd` exists. Task 10 introduces Cobra command imports and may refresh `collector/go.sum`.
 
 - [ ] **Step 5: Commit scaffold**
 
@@ -2029,6 +2061,7 @@ git commit -m "feat: add supabase api routes"
 - Create: `apps/web/src/components/Leaderboard.tsx`
 - Create: `apps/web/src/components/CollectorSetup.tsx`
 - Create: `apps/web/src/test/Dashboard.test.tsx`
+- Modify: `apps/web/src/app/page.tsx`
 - Modify: `apps/web/src/app/globals.css`
 
 - [ ] **Step 1: Write failing dashboard UI tests**
@@ -2215,6 +2248,16 @@ export function Dashboard() {
       <Leaderboard activeRange={range} onRangeChange={setRange} />
     </main>
   );
+}
+```
+
+Replace `apps/web/src/app/page.tsx` with:
+
+```tsx
+import { Dashboard } from "@/components/Dashboard";
+
+export default function HomePage() {
+  return <Dashboard />;
 }
 ```
 
@@ -2898,6 +2941,24 @@ var statusCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(statusCmd)
+}
+```
+
+Replace `collector/main.go` with:
+
+```go
+package main
+
+import (
+	"os"
+
+	"github.com/codex-token-leaderboard/collector/internal/cmd"
+)
+
+func main() {
+	if err := cmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }
 ```
 

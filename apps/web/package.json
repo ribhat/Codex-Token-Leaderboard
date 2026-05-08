@@ -4,7 +4,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "lint": "next lint",
+    "lint": "tsc --noEmit --incremental false",
     "test": "vitest run",
     "test:watch": "vitest"
   },

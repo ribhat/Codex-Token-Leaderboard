@@ -1,13 +1,7 @@
 package main
 
-import (
-	"os"
-
-	"github.com/codex-token-leaderboard/collector/internal/cmd"
-)
+import "fmt"
 
 func main() {
-	if err := cmd.Execute(); err != nil {
-		os.Exit(1)
-	}
+	fmt.Println("codex-token-leaderboard collector scaffold")
 }
