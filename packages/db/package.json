@@ -1,0 +1,7 @@
+{
+  "name": "@codex-token-leaderboard/db",
+  "private": true,
+  "scripts": {
+    "check": "node -e \"const fs=require('fs');fs.accessSync('migrations/0001_initial.sql')\""
+  }
+}
