@@ -3,6 +3,9 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -157,5 +160,98 @@ func TestPreviewPrintsDailyAggregateRows(t *testing.T) {
 	}
 	if row.ResponseCount != 2 {
 		t.Fatalf("expected response count 2, got %d", row.ResponseCount)
+	}
+}
+
+func TestSyncUploadsLocalAggregateAndPrintsRowCount(t *testing.T) {
+	sessionsPath := filepath.Join(t.TempDir(), "sessions")
+	if err := os.MkdirAll(filepath.Join(sessionsPath, "2026", "05"), 0o755); err != nil {
+		t.Fatalf("create sessions path: %v", err)
+	}
+	sessionFile := filepath.Join(sessionsPath, "2026", "05", "session.jsonl")
+	input := strings.Join([]string{
+		`{"timestamp":"2026-05-09T06:30:00Z","payload":{"info":{"last_token_usage":{"total_tokens":100,"input_tokens":60,"cached_input_tokens":20,"output_tokens":40,"reasoning_output_tokens":7}}}}`,
+		`{"timestamp":"2026-05-09T07:30:00Z","payload":{"info":{"last_token_usage":{"total_tokens":50,"input_tokens":30,"cached_input_tokens":10,"output_tokens":20,"reasoning_output_tokens":3}}}}`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(sessionFile, []byte(input), 0o644); err != nil {
+		t.Fatalf("write session file: %v", err)
+	}
+
+	const token = "secret-device-token"
+	var gotPath string
+	var gotAuthorization string
+	var gotContentType string
+	var gotRows []aggregate.DailyUsage
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotAuthorization = r.Header.Get("Authorization")
+		gotContentType = r.Header.Get("Content-Type")
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		var payload struct {
+			Rows []aggregate.DailyUsage `json:"rows"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("decode request body: %v\n%s", err, body)
+		}
+		gotRows = payload.Rows
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := config.Save(configPath, config.Config{
+		ServerURL:   server.URL + "/",
+		DeviceToken: token,
+	}); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	stdout, stderr, err := executeForTest(t, "--config", configPath, "sync", "--sessions", sessionsPath)
+	if err != nil {
+		t.Fatalf("sync returned error: %v", err)
+	}
+	if stderr != "" {
+		t.Fatalf("expected no stderr, got %q", stderr)
+	}
+	if !strings.Contains(stdout, "Synced 1 daily aggregate rows") {
+		t.Fatalf("expected sync row count, got %q", stdout)
+	}
+	if strings.Contains(stdout, token) || strings.Contains(stdout, sessionFile) || strings.Contains(stdout, sessionsPath) {
+		t.Fatalf("sync output leaked sensitive data: %q", stdout)
+	}
+	if gotPath != "/api/collector/sync" {
+		t.Fatalf("expected sync path, got %s", gotPath)
+	}
+	if gotAuthorization != "Bearer "+token {
+		t.Fatalf("unexpected authorization header: %q", gotAuthorization)
+	}
+	if gotContentType != "application/json" {
+		t.Fatalf("unexpected content type: %q", gotContentType)
+	}
+	if len(gotRows) != 1 {
+		t.Fatalf("expected one uploaded row, got %d", len(gotRows))
+	}
+	if gotRows[0].TotalTokens != 150 {
+		t.Fatalf("expected total tokens 150, got %d", gotRows[0].TotalTokens)
+	}
+}
+
+func TestSyncReportsNotLoggedInCleanlyWhenConfigMissing(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "missing.json")
+
+	stdout, _, err := executeForTest(t, "--config", configPath, "sync", "--sessions", filepath.Join(t.TempDir(), "sessions"))
+	if err == nil {
+		t.Fatal("expected sync to fail without config")
+	}
+	message := err.Error()
+	if !strings.Contains(message, "collector is not logged in") {
+		t.Fatalf("expected not logged in error, got %q", message)
+	}
+	if strings.Contains(message, configPath) || strings.Contains(stdout, configPath) {
+		t.Fatalf("sync leaked config path in not logged in output: stdout=%q err=%q", stdout, message)
 	}
 }

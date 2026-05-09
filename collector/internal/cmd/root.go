@@ -49,6 +49,7 @@ func NewRootCommand(stdout, stderr io.Writer) *cobra.Command {
 	root.AddCommand(newLoginCommand(opts))
 	root.AddCommand(newPreviewCommand())
 	root.AddCommand(newStatusCommand(opts))
+	root.AddCommand(newSyncCommand(opts))
 
 	return root
 }
