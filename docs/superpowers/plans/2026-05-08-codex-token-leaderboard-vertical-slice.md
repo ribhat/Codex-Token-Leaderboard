@@ -1196,8 +1196,9 @@ describe("collectorService", () => {
     });
 
     expect(result.token).toBe("plain-device-token");
-    expect(result.device.tokenHash).toBe(await hashToken("plain-device-token"));
-    expect(result.device.tokenHash).not.toBe("plain-device-token");
+    expect("tokenHash" in result.device).toBe(false);
+    expect(Array.from(repo.devices.values())[0].tokenHash).toBe(await hashToken("plain-device-token"));
+    expect(Array.from(repo.devices.values())[0].tokenHash).not.toBe("plain-device-token");
   });
 
   it("rejects missing, invalid, and revoked collector tokens", async () => {
@@ -1277,6 +1278,8 @@ import { generateToken, hashToken } from "./crypto";
 import type { AppRepository } from "./repository";
 import type { CollectorDevice, UsageAggregateInput, UserId } from "./types";
 
+export type PublicCollectorDevice = Omit<CollectorDevice, "tokenHash">;
+
 type CreateCollectorDeviceArgs = {
   repo: AppRepository;
   userId: UserId;
@@ -1293,9 +1296,21 @@ type SyncUsageArgs = {
   now: string;
 };
 
+function toPublicCollectorDevice(device: CollectorDevice): PublicCollectorDevice {
+  return {
+    id: device.id,
+    userId: device.userId,
+    platform: device.platform,
+    deviceLabel: device.deviceLabel,
+    lastSeenAt: device.lastSeenAt,
+    revokedAt: device.revokedAt,
+    createdAt: device.createdAt
+  };
+}
+
 export async function createCollectorDevice(
   args: CreateCollectorDeviceArgs
-): Promise<{ device: CollectorDevice; token: string }> {
+): Promise<{ device: PublicCollectorDevice; token: string }> {
   const profile = await args.repo.getProfile(args.userId);
   if (!profile) {
     throw new Error("Profile is required");
@@ -1306,7 +1321,11 @@ export async function createCollectorDevice(
     throw new Error("Platform is required");
   }
 
-  const token = args.token ?? generateToken();
+  const token = args.token?.trim() ?? generateToken();
+  if (!token) {
+    throw new Error("Collector token is required");
+  }
+
   const device = await args.repo.createCollectorDevice({
     userId: args.userId,
     tokenHash: await hashToken(token),
@@ -1315,12 +1334,20 @@ export async function createCollectorDevice(
     now: args.now
   });
 
-  return { device, token };
+  return { device: toPublicCollectorDevice(device), token };
 }
 
 export async function syncUsage(args: SyncUsageArgs) {
   const bearerToken = args.bearerToken.trim();
   if (!bearerToken) {
+    await args.repo.createSyncEvent({
+      deviceId: null,
+      userId: null,
+      success: false,
+      message: "Collector token is required",
+      daysSynced: 0,
+      createdAt: args.now
+    });
     throw new Error("Collector token is required");
   }
 
@@ -1361,7 +1388,7 @@ export async function syncUsage(args: SyncUsageArgs) {
     userId: device.userId,
     success: true,
     message: "Sync complete",
-    daysSynced: rows.length,
+    daysSynced: upserted.length,
     createdAt: args.now
   });
 
@@ -2045,7 +2072,7 @@ For `apps/web/src/app/api/groups/join/route.ts`, call `joinGroup` with `body.inv
 
 For `apps/web/src/app/api/groups/[id]/leaderboard/route.ts`, read `params.id` and `new URL(request.url).searchParams.get("range")`, default range to `today`, reject values outside `today`, `week`, `month`, `year`, and `all`, then call `getLeaderboard`.
 
-For `apps/web/src/app/api/collector/devices/route.ts`, call `createCollectorDevice` with `body.platform` and `body.deviceLabel ?? null`.
+For `apps/web/src/app/api/collector/devices/route.ts`, call `createCollectorDevice` with `body.platform` and `body.deviceLabel ?? null`. Return the service result directly; its `device` is a public DTO and must not serialize `tokenHash`.
 
 For `apps/web/src/app/api/collector/sync/route.ts`, do not use dashboard auth. Extract `Authorization: Bearer <device_token>`, parse `{ rows: UsageAggregateInput[] }`, and call `syncUsage`.
 
