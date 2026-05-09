@@ -16,18 +16,12 @@ type CreateCollectorDeviceArgs = {
 type SyncUsageArgs = {
   repo: AppRepository;
   bearerToken: string;
-  rows: UsageAggregateInput[];
+  rows: unknown;
   now: string;
 };
 
-const usageCountFields = [
-  "totalTokens",
-  "inputTokens",
-  "cachedInputTokens",
-  "outputTokens",
-  "reasoningOutputTokens",
-  "responseCount"
-] satisfies Array<keyof UsageAggregateInput>;
+const POSTGRES_INTEGER_MAX = 2_147_483_647;
+const MAX_TOKEN_COUNT = Number.MAX_SAFE_INTEGER;
 
 function toPublicCollectorDevice(device: CollectorDevice): PublicCollectorDevice {
   return {
@@ -51,27 +45,72 @@ function isRealUsageDate(value: string) {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
-function normalizeUsageRows(rows: UsageAggregateInput[]) {
+function isUsageRowCandidate(value: unknown): value is Partial<Record<keyof UsageAggregateInput, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isValidTokenCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= MAX_TOKEN_COUNT;
+}
+
+function isValidResponseCount(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= POSTGRES_INTEGER_MAX
+  );
+}
+
+function readTokenCount(row: Partial<Record<keyof UsageAggregateInput, unknown>>, field: keyof UsageAggregateInput) {
+  const value = row[field];
+  if (!isValidTokenCount(value)) {
+    throw new Error("Invalid usage payload");
+  }
+
+  return value;
+}
+
+function normalizeUsageRows(rows: unknown): UsageAggregateInput[] {
+  if (!Array.isArray(rows)) {
+    throw new Error("Invalid usage payload");
+  }
+
   return rows.map((row) => {
-    if (!isRealUsageDate(row.usageDate)) {
+    if (!isUsageRowCandidate(row) || typeof row.usageDate !== "string" || !isRealUsageDate(row.usageDate)) {
       throw new Error("Invalid usage payload");
     }
 
-    for (const field of usageCountFields) {
-      const value = row[field];
-      if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0) {
-        throw new Error("Invalid usage payload");
-      }
+    const totalTokens = readTokenCount(row, "totalTokens");
+    const inputTokens = readTokenCount(row, "inputTokens");
+    const cachedInputTokens = readTokenCount(row, "cachedInputTokens");
+    const outputTokens = readTokenCount(row, "outputTokens");
+    const reasoningOutputTokens = readTokenCount(row, "reasoningOutputTokens");
+
+    if (!isValidResponseCount(row.responseCount)) {
+      throw new Error("Invalid usage payload");
     }
 
-    const source = row.source?.trim() ?? "codex-jsonl";
+    const sourceValue = row.source;
+    if (sourceValue != null && typeof sourceValue !== "string") {
+      throw new Error("Invalid usage payload");
+    }
+
+    const source = sourceValue?.trim() ?? "codex-jsonl";
     if (!source) {
       throw new Error("Invalid usage payload");
     }
 
     return {
-      ...row,
-      source
+      usageDate: row.usageDate,
+      source,
+      totalTokens,
+      inputTokens,
+      cachedInputTokens,
+      outputTokens,
+      reasoningOutputTokens,
+      responseCount: row.responseCount
     };
   });
 }

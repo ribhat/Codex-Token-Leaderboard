@@ -212,6 +212,8 @@ describe("collectorService", () => {
       { name: "negative token count", row: { ...validRow, totalTokens: -1 } },
       { name: "infinite token count", row: { ...validRow, totalTokens: Number.POSITIVE_INFINITY } },
       { name: "NaN token count", row: { ...validRow, totalTokens: Number.NaN } },
+      { name: "oversized response count", row: { ...validRow, responseCount: 2_147_483_648 } },
+      { name: "oversized token count", row: { ...validRow, totalTokens: Number.MAX_SAFE_INTEGER + 1 } },
       { name: "invalid date", row: { ...validRow, usageDate: "2026-02-30" } },
       { name: "fractional response count", row: { ...validRow, responseCount: 1.5 } },
       { name: "blank source", row: { ...validRow, source: "  " } }
@@ -232,6 +234,40 @@ describe("collectorService", () => {
       await expect(syncUsage({ repo, bearerToken: `${testCase.name}-token`, rows: [testCase.row], now })).rejects.toThrow(
         "Invalid usage payload"
       );
+
+      expect(repo.usage.size).toBe(0);
+      expect(repo.syncEvents.at(-1)).toMatchObject({
+        deviceId: created.device.id,
+        userId: ada.id,
+        success: false,
+        message: "Invalid usage payload",
+        daysSynced: 0
+      });
+    }
+  });
+
+  it("rejects malformed usage rows before upsert and records a failed sync event", async () => {
+    const cases = [
+      { name: "non-array rows", rows: { ...validRow } },
+      { name: "null rows", rows: null },
+      { name: "null row entry", rows: [null] }
+    ];
+
+    for (const testCase of cases) {
+      const repo = new MemoryRepository();
+      await repo.upsertProfile(ada);
+      const created = await createCollectorDevice({
+        repo,
+        userId: ada.id,
+        platform: "windows",
+        deviceLabel: null,
+        now,
+        token: `${testCase.name}-token`
+      });
+
+      await expect(
+        syncUsage({ repo, bearerToken: `${testCase.name}-token`, rows: testCase.rows as never, now })
+      ).rejects.toThrow("Invalid usage payload");
 
       expect(repo.usage.size).toBe(0);
       expect(repo.syncEvents.at(-1)).toMatchObject({
