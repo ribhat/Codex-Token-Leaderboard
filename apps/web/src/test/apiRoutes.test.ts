@@ -187,6 +187,34 @@ describe("api route adapters", () => {
     expect(createCollectorDevice).not.toHaveBeenCalled();
   });
 
+  it("returns known validation errors as 400 without masking their messages", async () => {
+    mocks.createGroup.mockRejectedValue(new Error("Group name is required"));
+
+    const response = await createGroupPost(
+      new Request("http://localhost/api/groups", {
+        method: "POST",
+        body: JSON.stringify({ name: "" })
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "Group name is required" });
+  });
+
+  it("masks internal dashboard errors with a generic 500 response", async () => {
+    mocks.createGroup.mockRejectedValue(new Error("duplicate key value violates unique constraint profiles_pkey"));
+
+    const response = await createGroupPost(
+      new Request("http://localhost/api/groups", {
+        method: "POST",
+        body: JSON.stringify({ name: "Builders" })
+      })
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({ error: "Internal server error" });
+  });
+
   it("loads leaderboards with a default today range", async () => {
     mocks.getLeaderboard.mockResolvedValue({
       rows: [{ rank: 1, userId: "user-1", displayName: "Ada", totalTokens: 10 }]
@@ -276,5 +304,80 @@ describe("api route adapters", () => {
 
     expect(response.status).toBe(200);
     expect(syncUsage).toHaveBeenCalledWith(expect.objectContaining({ rows: undefined }));
+  });
+
+  it("returns 401 for missing collector tokens while preserving service auditing", async () => {
+    mocks.syncUsage.mockRejectedValue(new Error("Collector token is required"));
+
+    const response = await syncPost(
+      new Request("http://localhost/api/collector/sync", {
+        method: "POST",
+        body: JSON.stringify({ rows: [] })
+      })
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: "Collector token is required" });
+    expect(syncUsage).toHaveBeenCalledWith(expect.objectContaining({ bearerToken: "" }));
+  });
+
+  it("returns 401 for invalid collector tokens", async () => {
+    mocks.syncUsage.mockRejectedValue(new Error("Collector token is invalid"));
+
+    const response = await syncPost(
+      new Request("http://localhost/api/collector/sync", {
+        method: "POST",
+        headers: { Authorization: "Bearer wrong-token" },
+        body: JSON.stringify({ rows: [] })
+      })
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: "Collector token is invalid" });
+  });
+
+  it("returns 403 for revoked collector tokens", async () => {
+    mocks.syncUsage.mockRejectedValue(new Error("Collector token is revoked"));
+
+    const response = await syncPost(
+      new Request("http://localhost/api/collector/sync", {
+        method: "POST",
+        headers: { Authorization: "Bearer revoked-token" },
+        body: JSON.stringify({ rows: [] })
+      })
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: "Collector token is revoked" });
+  });
+
+  it("returns 400 for invalid collector usage payloads", async () => {
+    mocks.syncUsage.mockRejectedValue(new Error("Invalid usage payload"));
+
+    const response = await syncPost(
+      new Request("http://localhost/api/collector/sync", {
+        method: "POST",
+        headers: { Authorization: "Bearer valid-token" },
+        body: JSON.stringify({ rows: "bad" })
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "Invalid usage payload" });
+  });
+
+  it("masks internal collector sync errors with a generic 500 response", async () => {
+    mocks.syncUsage.mockRejectedValue(new Error("duplicate key value violates unique constraint sync_events_pkey"));
+
+    const response = await syncPost(
+      new Request("http://localhost/api/collector/sync", {
+        method: "POST",
+        headers: { Authorization: "Bearer valid-token" },
+        body: JSON.stringify({ rows: [] })
+      })
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({ error: "Internal server error" });
   });
 });
