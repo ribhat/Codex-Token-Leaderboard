@@ -76,6 +76,34 @@ describe("collectorService", () => {
     ).rejects.toThrow("Collector token is required");
   });
 
+  it("rejects missing profiles and blank platforms when creating collector devices", async () => {
+    const repo = new MemoryRepository();
+
+    await expect(
+      createCollectorDevice({
+        repo,
+        userId: ada.id,
+        platform: "windows",
+        deviceLabel: null,
+        now,
+        token: "valid-token"
+      })
+    ).rejects.toThrow("Profile is required");
+
+    await repo.upsertProfile(ada);
+
+    await expect(
+      createCollectorDevice({
+        repo,
+        userId: ada.id,
+        platform: "  ",
+        deviceLabel: null,
+        now,
+        token: "valid-token"
+      })
+    ).rejects.toThrow("Platform is required");
+  });
+
   it("rejects missing, invalid, and revoked collector tokens", async () => {
     const repo = new MemoryRepository();
     await repo.upsertProfile(ada);
@@ -147,7 +175,7 @@ describe("collectorService", () => {
       }
     ];
 
-    await syncUsage({ repo, bearerToken: "valid-token", rows, now });
+    const result = await syncUsage({ repo, bearerToken: "valid-token", rows, now });
     await syncUsage({
       repo,
       bearerToken: "valid-token",
@@ -155,6 +183,23 @@ describe("collectorService", () => {
       now: "2026-05-08T13:00:00.000Z"
     });
 
+    expect(result).toMatchObject({
+      rows: [
+        {
+          userId: ada.id,
+          usageDate: "2026-05-08",
+          source: "codex-jsonl",
+          totalTokens: 100,
+          inputTokens: 30,
+          cachedInputTokens: 10,
+          outputTokens: 40,
+          reasoningOutputTokens: 20,
+          responseCount: 2,
+          updatedAt: now
+        }
+      ]
+    });
+    expect(result.rows[0].totalTokens).toBe(100);
     expect(Array.from(repo.usage.values())).toHaveLength(1);
     expect(Array.from(repo.usage.values())[0].totalTokens).toBe(150);
     expect(Array.from(repo.usage.values())[0].source).toBe("codex-jsonl");
