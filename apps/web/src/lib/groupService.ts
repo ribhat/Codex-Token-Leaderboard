@@ -2,6 +2,8 @@ import { generateToken, hashToken } from "./crypto";
 import type { AppRepository } from "./repository";
 import type { Group, UserId } from "./types";
 
+export type PublicGroup = Omit<Group, "inviteCodeHash">;
+
 type CreateGroupArgs = {
   repo: AppRepository;
   userId: UserId;
@@ -18,7 +20,12 @@ type JoinGroupArgs = {
   now: string;
 };
 
-export async function createGroup(args: CreateGroupArgs): Promise<{ group: Group; inviteCode: string }> {
+function toPublicGroup(group: Group): PublicGroup {
+  const { inviteCodeHash: _inviteCodeHash, ...publicGroup } = group;
+  return publicGroup;
+}
+
+export async function createGroup(args: CreateGroupArgs): Promise<{ group: PublicGroup; inviteCode: string }> {
   const trimmedName = args.name.trim();
   if (!trimmedName) {
     throw new Error("Group name is required");
@@ -45,10 +52,10 @@ export async function createGroup(args: CreateGroupArgs): Promise<{ group: Group
     joinedAt: args.now
   });
 
-  return { group, inviteCode };
+  return { group: toPublicGroup(group), inviteCode };
 }
 
-export async function joinGroup(args: JoinGroupArgs): Promise<{ group: Group }> {
+export async function joinGroup(args: JoinGroupArgs): Promise<{ group: PublicGroup }> {
   const inviteCode = args.inviteCode.trim();
   if (!inviteCode) {
     throw new Error("Invite code is required");
@@ -71,5 +78,5 @@ export async function joinGroup(args: JoinGroupArgs): Promise<{ group: Group }> 
     joinedAt: args.now
   });
 
-  return { group };
+  return { group: toPublicGroup(group) };
 }

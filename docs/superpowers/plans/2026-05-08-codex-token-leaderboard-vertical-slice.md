@@ -789,6 +789,11 @@ export class MemoryRepository implements AppRepository {
   }
 
   async addGroupMember(member: GroupMember) {
+    const existing = this.members.get(`${member.groupId}:${member.userId}`);
+    if (existing) {
+      return existing;
+    }
+
     this.members.set(`${member.groupId}:${member.userId}`, member);
     return member;
   }
@@ -975,7 +980,10 @@ describe("groupService", () => {
     expect(result.group.name).toBe("Friday Builders");
     expect(result.inviteCode).toBe("invite-secret");
     await expect(repo.isGroupMember(result.group.id, ada.id)).resolves.toBe(true);
-    expect(result.group.inviteCodeHash).toBe(await hashToken("invite-secret"));
+    expect(result.group).not.toHaveProperty("inviteCodeHash");
+    await expect(repo.getGroup(result.group.id)).resolves.toMatchObject({
+      inviteCodeHash: await hashToken("invite-secret")
+    });
   });
 
   it("joins a group by invite code idempotently", async () => {
@@ -1050,6 +1058,8 @@ import { generateToken, hashToken } from "./crypto";
 import type { AppRepository } from "./repository";
 import type { Group, UserId } from "./types";
 
+export type PublicGroup = Omit<Group, "inviteCodeHash">;
+
 type CreateGroupArgs = {
   repo: AppRepository;
   userId: UserId;
@@ -1066,7 +1076,12 @@ type JoinGroupArgs = {
   now: string;
 };
 
-export async function createGroup(args: CreateGroupArgs): Promise<{ group: Group; inviteCode: string }> {
+function toPublicGroup(group: Group): PublicGroup {
+  const { inviteCodeHash: _inviteCodeHash, ...publicGroup } = group;
+  return publicGroup;
+}
+
+export async function createGroup(args: CreateGroupArgs): Promise<{ group: PublicGroup; inviteCode: string }> {
   const trimmedName = args.name.trim();
   if (!trimmedName) {
     throw new Error("Group name is required");
@@ -1093,10 +1108,10 @@ export async function createGroup(args: CreateGroupArgs): Promise<{ group: Group
     joinedAt: args.now
   });
 
-  return { group, inviteCode };
+  return { group: toPublicGroup(group), inviteCode };
 }
 
-export async function joinGroup(args: JoinGroupArgs): Promise<{ group: Group }> {
+export async function joinGroup(args: JoinGroupArgs): Promise<{ group: PublicGroup }> {
   const inviteCode = args.inviteCode.trim();
   if (!inviteCode) {
     throw new Error("Invite code is required");
@@ -1119,7 +1134,7 @@ export async function joinGroup(args: JoinGroupArgs): Promise<{ group: Group }> 
     joinedAt: args.now
   });
 
-  return { group };
+  return { group: toPublicGroup(group) };
 }
 ```
 
@@ -1820,17 +1835,25 @@ export class SupabaseRepository implements AppRepository {
   }
 
   async addGroupMember(member: GroupMember) {
+    const { data: existing, error: existingError } = await this.supabase
+      .from("group_members")
+      .select("*")
+      .eq("group_id", member.groupId)
+      .eq("user_id", member.userId)
+      .maybeSingle();
+    assertNoError(existingError);
+    if (existing) {
+      return mapMember(existing);
+    }
+
     const { data, error } = await this.supabase
       .from("group_members")
-      .upsert(
-        {
-          group_id: member.groupId,
-          user_id: member.userId,
-          role: member.role,
-          joined_at: member.joinedAt
-        },
-        { onConflict: "group_id,user_id" }
-      )
+      .insert({
+        group_id: member.groupId,
+        user_id: member.userId,
+        role: member.role,
+        joined_at: member.joinedAt
+      })
       .select("*")
       .single();
     assertNoError(error);

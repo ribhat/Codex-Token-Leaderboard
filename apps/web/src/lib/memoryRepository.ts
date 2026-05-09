@@ -68,6 +68,11 @@ export class MemoryRepository implements AppRepository {
   }
 
   async addGroupMember(member: GroupMember) {
+    const existing = this.members.get(`${member.groupId}:${member.userId}`);
+    if (existing) {
+      return clone(existing);
+    }
+
     const stored = clone(member);
     this.members.set(`${member.groupId}:${member.userId}`, stored);
     return clone(stored);
