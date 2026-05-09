@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -215,6 +215,73 @@ describe("Dashboard", () => {
     expect(authMocks.signOut).toHaveBeenCalled();
     expect(screen.getByText("Sample group: 3 members")).toBeInTheDocument();
     expect(screen.queryByText("Current group: Builders")).not.toBeInTheDocument();
+    expect(screen.getByText("Riley Chen")).toBeInTheDocument();
+  });
+
+  it("ignores stale leaderboard responses that resolve after sign-out", async () => {
+    const user = userEvent.setup();
+    authMocks.getSession.mockResolvedValue({
+      data: {
+        session: {
+          access_token: "session-token",
+          user: { id: "user-1", email: "ada@example.test", user_metadata: { name: "Ada" } }
+        }
+      }
+    });
+    let resolveLeaderboard: (response: Response) => void = () => {};
+    const leaderboardResponse = new Promise<Response>((resolve) => {
+      resolveLeaderboard = resolve;
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/groups") {
+        return jsonResponse({
+          group: {
+            id: "group-1",
+            name: "Builders",
+            creatorId: "user-1",
+            timezone: "UTC",
+            createdAt: "2026-05-08T12:00:00.000Z"
+          },
+          inviteCode: "invite-code"
+        });
+      }
+      if (url === "/api/groups/group-1/leaderboard?range=today") {
+        return leaderboardResponse;
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<Dashboard />);
+
+    expect(await screen.findByRole("button", { name: "Sign out" })).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Group name"), "Builders");
+    await user.click(screen.getByRole("button", { name: "Create group" }));
+    expect(await screen.findByText("Current group: Builders")).toBeInTheDocument();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/groups/group-1/leaderboard?range=today", expect.anything()));
+
+    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    resolveLeaderboard(
+      jsonResponse({
+        rows: [
+          {
+            userId: "private-user",
+            rank: 1,
+            displayName: "Private Usage",
+            avatarUrl: null,
+            totalTokens: 999,
+            isExactTotalHidden: false,
+            lastSyncedAt: "2026-05-08T12:00:00.000Z",
+            isStale: false
+          }
+        ]
+      })
+    );
+    await leaderboardResponse;
+
+    expect(screen.getByText("Sample group: 3 members")).toBeInTheDocument();
+    expect(screen.queryByText("Private Usage")).not.toBeInTheDocument();
     expect(screen.getByText("Riley Chen")).toBeInTheDocument();
   });
 

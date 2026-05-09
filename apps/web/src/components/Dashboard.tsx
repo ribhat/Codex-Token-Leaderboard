@@ -2,7 +2,7 @@
 
 import { CircleUserRound, LogIn, Plus, Users } from "lucide-react";
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { createSupabaseBrowserClient, displayNameFromSession } from "@/lib/supabaseBrowser";
 import type { LeaderboardRange } from "@/lib/types";
@@ -91,6 +91,7 @@ export function Dashboard({ accessToken = null }: DashboardProps) {
   const externalAccessToken = accessToken?.trim() ?? "";
   const effectiveAccessToken = session?.access_token ?? externalAccessToken;
   const userScope = session?.user.id ?? (externalAccessToken ? "external-token" : "");
+  const userScopeRef = useRef(userScope);
   const signedInName = displayNameFromSession(session);
 
   const resetPrivateDashboardState = useCallback(() => {
@@ -108,6 +109,7 @@ export function Dashboard({ accessToken = null }: DashboardProps) {
       const supabase = createSupabaseBrowserClient();
       supabase.auth.getSession().then(({ data }) => {
         if (isMounted) {
+          userScopeRef.current = data.session?.user.id ?? (externalAccessToken ? "external-token" : "");
           setSession(data.session);
         }
       });
@@ -115,6 +117,7 @@ export function Dashboard({ accessToken = null }: DashboardProps) {
         data: { subscription }
       } = supabase.auth.onAuthStateChange((_event, nextSession) => {
         if (isMounted) {
+          userScopeRef.current = nextSession?.user.id ?? (externalAccessToken ? "external-token" : "");
           setSession(nextSession);
           setAuthError(null);
         }
@@ -129,14 +132,15 @@ export function Dashboard({ accessToken = null }: DashboardProps) {
         isMounted = false;
       };
     }
-  }, []);
+  }, [externalAccessToken]);
 
   useEffect(() => {
+    userScopeRef.current = userScope;
     resetPrivateDashboardState();
   }, [resetPrivateDashboardState, userScope]);
 
   const loadLeaderboard = useCallback(
-    async (groupId: string, range: LeaderboardRange, token: string) => {
+    async (groupId: string, range: LeaderboardRange, token: string, requestedUserScope: string) => {
       if (!token) {
         return;
       }
@@ -150,6 +154,10 @@ export function Dashboard({ accessToken = null }: DashboardProps) {
       }
 
       const payload = (await response.json()) as LeaderboardResponse;
+      if (userScopeRef.current !== requestedUserScope) {
+        return;
+      }
+
       setLeaderboardMembers(payload.rows ?? []);
     },
     []
@@ -160,10 +168,13 @@ export function Dashboard({ accessToken = null }: DashboardProps) {
       return;
     }
 
-    loadLeaderboard(activeGroup.id, selectedRange, effectiveAccessToken).catch((error) => {
+    loadLeaderboard(activeGroup.id, selectedRange, effectiveAccessToken, userScope).catch((error) => {
+      if (userScopeRef.current !== userScope) {
+        return;
+      }
       setLeaderboardError(error instanceof Error ? error.message : "Leaderboard could not be loaded");
     });
-  }, [activeGroup, effectiveAccessToken, loadLeaderboard, selectedRange]);
+  }, [activeGroup, effectiveAccessToken, loadLeaderboard, selectedRange, userScope]);
 
   async function signInOrOut() {
     setIsSigningIn(true);
@@ -173,6 +184,7 @@ export function Dashboard({ accessToken = null }: DashboardProps) {
       const supabase = createSupabaseBrowserClient();
       if (session) {
         await supabase.auth.signOut();
+        userScopeRef.current = externalAccessToken ? "external-token" : "";
         setSession(null);
         resetPrivateDashboardState();
         return;
