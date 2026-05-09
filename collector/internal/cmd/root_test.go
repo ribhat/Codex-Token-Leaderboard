@@ -52,7 +52,7 @@ func TestLoginSavesConfigAndPrintsConfirmation(t *testing.T) {
 		t.Fatalf("expected saved server URL, got %q", got.ServerURL)
 	}
 	if got.DeviceToken != "device-token-123" {
-		t.Fatalf("expected saved device token, got %q", got.DeviceToken)
+		t.Fatal("saved device token did not match input token")
 	}
 }
 
@@ -88,7 +88,36 @@ func TestStatusPrintsServerAndHidesToken(t *testing.T) {
 		t.Fatalf("expected configured token status, got %q", stdout)
 	}
 	if strings.Contains(stdout, "secret-device-token") {
-		t.Fatalf("status printed the device token: %q", stdout)
+		t.Fatal("status printed the raw device token")
+	}
+}
+
+func TestPreviewReturnsSanitizedErrors(t *testing.T) {
+	privateRoot := filepath.Join(t.TempDir(), "private", "sessions")
+
+	_, _, err := executeForTest(t, "preview", "--sessions", privateRoot)
+	if err == nil {
+		t.Fatal("expected preview to fail for missing session directory")
+	}
+	if strings.Contains(err.Error(), privateRoot) {
+		t.Fatalf("preview error leaked sessions path: %v", err)
+	}
+
+	sessionsPath := filepath.Join(t.TempDir(), "sessions")
+	if err := os.MkdirAll(sessionsPath, 0o755); err != nil {
+		t.Fatalf("create sessions path: %v", err)
+	}
+	privateFile := filepath.Join(sessionsPath, "private-session.jsonl")
+	if err := os.WriteFile(privateFile, []byte("{not json}\n"), 0o644); err != nil {
+		t.Fatalf("write malformed session file: %v", err)
+	}
+
+	_, _, err = executeForTest(t, "preview", "--sessions", sessionsPath)
+	if err == nil {
+		t.Fatal("expected preview to fail for malformed session file")
+	}
+	if strings.Contains(err.Error(), privateFile) || strings.Contains(err.Error(), sessionsPath) {
+		t.Fatalf("preview parse error leaked local path: %v", err)
 	}
 }
 

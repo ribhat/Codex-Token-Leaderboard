@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -37,28 +38,30 @@ func TestSaveAndLoadConfig(t *testing.T) {
 		t.Fatalf("Save returned error: %v", err)
 	}
 
-	dirInfo, err := os.Stat(filepath.Dir(path))
-	if err != nil {
-		t.Fatalf("stat config dir: %v", err)
-	}
-	if got := dirInfo.Mode().Perm(); got != 0o700 {
-		t.Fatalf("expected config dir mode 0700, got %o", got)
-	}
+	if runtime.GOOS != "windows" {
+		dirInfo, err := os.Stat(filepath.Dir(path))
+		if err != nil {
+			t.Fatalf("stat config dir: %v", err)
+		}
+		if got := dirInfo.Mode().Perm(); got != 0o700 {
+			t.Fatalf("expected config dir mode 0700, got %o", got)
+		}
 
-	fileInfo, err := os.Stat(path)
-	if err != nil {
-		t.Fatalf("stat config file: %v", err)
-	}
-	if got := fileInfo.Mode().Perm(); got != 0o600 {
-		t.Fatalf("expected config file mode 0600, got %o", got)
+		fileInfo, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat config file: %v", err)
+		}
+		if got := fileInfo.Mode().Perm(); got != 0o600 {
+			t.Fatalf("expected config file mode 0600, got %o", got)
+		}
 	}
 
 	got, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load returned error: %v", err)
 	}
-	if got != want {
-		t.Fatalf("expected loaded config %#v, got %#v", want, got)
+	if got.ServerURL != want.ServerURL || got.DeviceToken != want.DeviceToken {
+		t.Fatal("loaded config did not match saved config")
 	}
 
 	raw, err := os.ReadFile(path)
@@ -73,7 +76,7 @@ func TestSaveAndLoadConfig(t *testing.T) {
 		t.Fatalf("expected server_url JSON field, got %q", fields["server_url"])
 	}
 	if fields["device_token"] != want.DeviceToken {
-		t.Fatalf("expected device_token JSON field, got %q", fields["device_token"])
+		t.Fatal("expected device_token JSON field to match saved token")
 	}
 }
 
