@@ -28,6 +28,25 @@ describe("groupService", () => {
     });
   });
 
+  it("creates a fallback profile before creating a first group for a fresh user", async () => {
+    const repo = new MemoryRepository();
+
+    const result = await createGroup({
+      repo,
+      userId: ada.id,
+      name: "Friday Builders",
+      timezone: "America/Los_Angeles",
+      now,
+      inviteCode: "invite-secret"
+    });
+
+    await expect(repo.getProfile(ada.id)).resolves.toMatchObject({
+      id: ada.id,
+      displayName: "Codex user user-ada"
+    });
+    await expect(repo.isGroupMember(result.group.id, ada.id)).resolves.toBe(true);
+  });
+
   it("delegates group and owner creation to one repository method", async () => {
     const group = {
       id: "group-1",

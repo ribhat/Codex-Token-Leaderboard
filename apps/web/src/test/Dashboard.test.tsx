@@ -1,11 +1,44 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const authMocks = vi.hoisted(() => ({
+  getSession: vi.fn(),
+  onAuthStateChange: vi.fn(),
+  signInWithOAuth: vi.fn(),
+  signOut: vi.fn()
+}));
+
+vi.mock("@/lib/supabaseBrowser", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/supabaseBrowser")>("@/lib/supabaseBrowser");
+  return {
+    ...actual,
+    createSupabaseBrowserClient: vi.fn(() => ({
+      auth: authMocks
+    }))
+  };
+});
+
 import { Dashboard } from "../components/Dashboard";
 
+function jsonResponse(body: unknown, init?: ResponseInit) {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+    ...init
+  });
+}
+
 describe("Dashboard", () => {
+  beforeEach(() => {
+    authMocks.getSession.mockResolvedValue({ data: { session: null } });
+    authMocks.onAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } });
+    authMocks.signInWithOAuth.mockResolvedValue({ error: null });
+    authMocks.signOut.mockResolvedValue({ error: null });
+  });
+
   afterEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -54,6 +87,88 @@ describe("Dashboard", () => {
     expect(
       await screen.findByText((text) => text.includes("codex-tokens login --server") && text.includes("device-token"))
     ).toBeInTheDocument();
+  });
+
+  it("creates a group through the dashboard API and loads its leaderboard", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/groups") {
+        return jsonResponse({
+          group: {
+            id: "group-1",
+            name: "Builders",
+            creatorId: "user-1",
+            timezone: "UTC",
+            createdAt: "2026-05-08T12:00:00.000Z"
+          },
+          inviteCode: "invite-code"
+        });
+      }
+      if (url === "/api/groups/group-1/leaderboard?range=today") {
+        return jsonResponse({ rows: [] });
+      }
+      throw new Error(`Unexpected fetch ${url} ${init?.method ?? "GET"}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<Dashboard accessToken="dashboard-token" />);
+
+    await user.type(screen.getByLabelText("Group name"), "Builders");
+    await user.click(screen.getByRole("button", { name: "Create group" }));
+
+    expect(await screen.findByText("Created Builders. Invite code: invite-code")).toBeInTheDocument();
+    expect(screen.getByText("Current group: Builders")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/groups",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ Authorization: "Bearer dashboard-token" }),
+        body: JSON.stringify({ name: "Builders" })
+      })
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/groups/group-1/leaderboard?range=today",
+      expect.objectContaining({ headers: { Authorization: "Bearer dashboard-token" } })
+    );
+  });
+
+  it("joins a group by invite code through the dashboard API", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/groups/join") {
+        return jsonResponse({
+          group: {
+            id: "group-2",
+            name: "Friends",
+            creatorId: "user-2",
+            timezone: "UTC",
+            createdAt: "2026-05-08T12:00:00.000Z"
+          }
+        });
+      }
+      if (url === "/api/groups/group-2/leaderboard?range=today") {
+        return jsonResponse({ rows: [] });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<Dashboard accessToken="dashboard-token" />);
+
+    await user.type(screen.getByLabelText("Invite code"), "invite-code");
+    await user.click(screen.getByRole("button", { name: "Join" }));
+
+    expect(await screen.findByText("Joined Friends.")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/groups/join",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ Authorization: "Bearer dashboard-token" }),
+        body: JSON.stringify({ inviteCode: "invite-code" })
+      })
+    );
   });
 
   it("does not call the collector token route before sign-in", async () => {

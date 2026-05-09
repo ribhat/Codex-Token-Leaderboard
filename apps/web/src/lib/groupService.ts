@@ -1,4 +1,5 @@
 import { generateToken, hashToken } from "./crypto";
+import { ensureProfile } from "./profileService";
 import type { AppRepository } from "./repository";
 import type { Group, UserId } from "./types";
 
@@ -31,10 +32,7 @@ export async function createGroup(args: CreateGroupArgs): Promise<{ group: Publi
     throw new Error("Group name is required");
   }
 
-  const profile = await args.repo.getProfile(args.userId);
-  if (!profile) {
-    throw new Error("Profile is required");
-  }
+  await ensureProfile(args.repo, args.userId);
 
   const inviteCode = args.inviteCode ?? generateToken(18);
   const group = await args.repo.createGroupWithOwner({
@@ -54,10 +52,7 @@ export async function joinGroup(args: JoinGroupArgs): Promise<{ group: PublicGro
     throw new Error("Invite code is required");
   }
 
-  const profile = await args.repo.getProfile(args.userId);
-  if (!profile) {
-    throw new Error("Profile is required");
-  }
+  await ensureProfile(args.repo, args.userId);
 
   const group = await args.repo.getGroupByInviteHash(await hashToken(inviteCode));
   if (!group) {

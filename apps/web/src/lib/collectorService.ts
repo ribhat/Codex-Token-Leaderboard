@@ -1,4 +1,5 @@
 import { generateToken, hashToken } from "./crypto";
+import { ensureProfile } from "./profileService";
 import type { AppRepository } from "./repository";
 import type { CollectorDevice, UsageAggregateInput, UserId } from "./types";
 
@@ -112,15 +113,12 @@ function normalizeUsageRows(rows: unknown): UsageAggregateInput[] {
 export async function createCollectorDevice(
   args: CreateCollectorDeviceArgs
 ): Promise<{ device: PublicCollectorDevice; token: string }> {
-  const profile = await args.repo.getProfile(args.userId);
-  if (!profile) {
-    throw new Error("Profile is required");
-  }
-
   const platform = args.platform.trim();
   if (!platform) {
     throw new Error("Platform is required");
   }
+
+  await ensureProfile(args.repo, args.userId);
 
   const token = args.token?.trim() ?? generateToken();
   if (!token) {

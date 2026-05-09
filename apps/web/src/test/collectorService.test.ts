@@ -76,20 +76,26 @@ describe("collectorService", () => {
     ).rejects.toThrow("Collector token is required");
   });
 
-  it("rejects missing profiles and blank platforms when creating collector devices", async () => {
+  it("creates a fallback profile before creating a first collector device for a fresh user", async () => {
     const repo = new MemoryRepository();
 
-    await expect(
-      createCollectorDevice({
-        repo,
-        userId: ada.id,
-        platform: "windows",
-        deviceLabel: null,
-        now,
-        token: "valid-token"
-      })
-    ).rejects.toThrow("Profile is required");
+    await createCollectorDevice({
+      repo,
+      userId: ada.id,
+      platform: "windows",
+      deviceLabel: null,
+      now,
+      token: "valid-token"
+    });
 
+    await expect(repo.getProfile(ada.id)).resolves.toMatchObject({
+      id: ada.id,
+      displayName: "Codex user user-ada"
+    });
+  });
+
+  it("rejects blank platforms when creating collector devices", async () => {
+    const repo = new MemoryRepository();
     await repo.upsertProfile(ada);
 
     await expect(

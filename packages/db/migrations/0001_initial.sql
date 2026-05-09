@@ -86,6 +86,36 @@ begin
 end;
 $$;
 
+create or replace function public.handle_new_user_profile()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, display_name, avatar_url)
+  values (
+    new.id,
+    coalesce(
+      nullif(new.raw_user_meta_data ->> 'name', ''),
+      nullif(new.raw_user_meta_data ->> 'user_name', ''),
+      nullif(new.raw_user_meta_data ->> 'preferred_username', ''),
+      split_part(new.email, '@', 1),
+      'Codex user'
+    ),
+    nullif(new.raw_user_meta_data ->> 'avatar_url', '')
+  )
+  on conflict (id) do nothing;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+after insert on auth.users
+for each row execute function public.handle_new_user_profile();
+
 create index if not exists group_members_user_id_idx on public.group_members(user_id);
 create index if not exists collector_devices_user_id_idx on public.collector_devices(user_id);
 create index if not exists usage_daily_date_idx on public.usage_daily(usage_date);

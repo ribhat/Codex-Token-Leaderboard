@@ -2,7 +2,9 @@
 
 import { CircleUserRound, LogIn, Plus, Users } from "lucide-react";
 import type { FormEvent } from "react";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { createSupabaseBrowserClient, displayNameFromSession } from "@/lib/supabaseBrowser";
 import type { LeaderboardRange } from "@/lib/types";
 import { CollectorSetup } from "./CollectorSetup";
 import { Leaderboard, type LeaderboardMember } from "./Leaderboard";
@@ -44,12 +46,216 @@ type DashboardProps = {
   accessToken?: string | null;
 };
 
-function preventPlaceholderSubmit(event: FormEvent<HTMLFormElement>) {
-  event.preventDefault();
+type PublicGroup = {
+  id: string;
+  name: string;
+  creatorId: string;
+  timezone: string;
+  createdAt: string;
+};
+
+type GroupResponse = {
+  group?: PublicGroup;
+  inviteCode?: string;
+  error?: string;
+};
+
+type LeaderboardResponse = {
+  rows?: LeaderboardMember[];
+  error?: string;
+};
+
+async function readJsonError(response: Response) {
+  try {
+    const payload = (await response.json()) as { error?: string };
+    return payload.error ?? "Request failed";
+  } catch {
+    return "Request failed";
+  }
 }
 
 export function Dashboard({ accessToken = null }: DashboardProps) {
   const [selectedRange, setSelectedRange] = useState<LeaderboardRange>("today");
+  const [session, setSession] = useState<Session | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [activeGroup, setActiveGroup] = useState<PublicGroup | null>(null);
+  const [groupStatus, setGroupStatus] = useState<string | null>(null);
+  const [groupError, setGroupError] = useState<string | null>(null);
+  const [isCreatingGroup, setIsCreatingGroup] = useState(false);
+  const [isJoiningGroup, setIsJoiningGroup] = useState(false);
+  const [leaderboardMembers, setLeaderboardMembers] = useState<LeaderboardMember[]>(sampleMembers);
+  const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
+  const effectiveAccessToken = session?.access_token ?? accessToken?.trim() ?? "";
+  const signedInName = displayNameFromSession(session);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    try {
+      const supabase = createSupabaseBrowserClient();
+      supabase.auth.getSession().then(({ data }) => {
+        if (isMounted) {
+          setSession(data.session);
+        }
+      });
+      const {
+        data: { subscription }
+      } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+        if (isMounted) {
+          setSession(nextSession);
+          setAuthError(null);
+        }
+      });
+
+      return () => {
+        isMounted = false;
+        subscription.unsubscribe();
+      };
+    } catch {
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, []);
+
+  const loadLeaderboard = useCallback(
+    async (groupId: string, range: LeaderboardRange, token: string) => {
+      if (!token) {
+        return;
+      }
+
+      setLeaderboardError(null);
+      const response = await fetch(`/api/groups/${groupId}/leaderboard?range=${range}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!response.ok) {
+        throw new Error(await readJsonError(response));
+      }
+
+      const payload = (await response.json()) as LeaderboardResponse;
+      setLeaderboardMembers(payload.rows ?? []);
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!activeGroup || !effectiveAccessToken) {
+      return;
+    }
+
+    loadLeaderboard(activeGroup.id, selectedRange, effectiveAccessToken).catch((error) => {
+      setLeaderboardError(error instanceof Error ? error.message : "Leaderboard could not be loaded");
+    });
+  }, [activeGroup, effectiveAccessToken, loadLeaderboard, selectedRange]);
+
+  async function signInOrOut() {
+    setIsSigningIn(true);
+    setAuthError(null);
+
+    try {
+      const supabase = createSupabaseBrowserClient();
+      if (session) {
+        await supabase.auth.signOut();
+        setSession(null);
+        return;
+      }
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "github",
+        options: { redirectTo: window.location.origin }
+      });
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "GitHub sign-in could not start");
+    } finally {
+      setIsSigningIn(false);
+    }
+  }
+
+  async function submitGroup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!effectiveAccessToken) {
+      setGroupError("Sign in with GitHub before managing groups.");
+      return;
+    }
+
+    setIsCreatingGroup(true);
+    setGroupError(null);
+    setGroupStatus(null);
+
+    try {
+      const response = await fetch("/api/groups", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${effectiveAccessToken}`
+        },
+        body: JSON.stringify({ name: groupName })
+      });
+      if (!response.ok) {
+        throw new Error(await readJsonError(response));
+      }
+
+      const payload = (await response.json()) as GroupResponse;
+      if (!payload.group) {
+        throw new Error("Group could not be created");
+      }
+      setActiveGroup(payload.group);
+      setGroupName("");
+      setGroupStatus(
+        payload.inviteCode
+          ? `Created ${payload.group.name}. Invite code: ${payload.inviteCode}`
+          : `Created ${payload.group.name}.`
+      );
+    } catch (error) {
+      setGroupError(error instanceof Error ? error.message : "Group could not be created");
+    } finally {
+      setIsCreatingGroup(false);
+    }
+  }
+
+  async function submitInvite(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!effectiveAccessToken) {
+      setGroupError("Sign in with GitHub before managing groups.");
+      return;
+    }
+
+    setIsJoiningGroup(true);
+    setGroupError(null);
+    setGroupStatus(null);
+
+    try {
+      const response = await fetch("/api/groups/join", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${effectiveAccessToken}`
+        },
+        body: JSON.stringify({ inviteCode })
+      });
+      if (!response.ok) {
+        throw new Error(await readJsonError(response));
+      }
+
+      const payload = (await response.json()) as GroupResponse;
+      if (!payload.group) {
+        throw new Error("Group could not be joined");
+      }
+      setActiveGroup(payload.group);
+      setInviteCode("");
+      setGroupStatus(`Joined ${payload.group.name}.`);
+    } catch (error) {
+      setGroupError(error instanceof Error ? error.message : "Group could not be joined");
+    } finally {
+      setIsJoiningGroup(false);
+    }
+  }
 
   return (
     <main className="dashboard-shell">
@@ -60,18 +266,23 @@ export function Dashboard({ accessToken = null }: DashboardProps) {
         </div>
         <div className="identity-area" aria-label="Profile">
           <div className="identity-copy">
-            <span>Not signed in</span>
-            <small>Connect GitHub to save groups.</small>
+            <span>{session ? signedInName : "Not signed in"}</span>
+            <small>{session ? "GitHub connected." : "Connect GitHub to save groups."}</small>
           </div>
-          <button type="button" className="identity-button">
+          <button type="button" className="identity-button" onClick={signInOrOut} disabled={isSigningIn}>
             <CircleUserRound size={16} aria-hidden="true" />
-            Sign in with GitHub
+            {session ? "Sign out" : isSigningIn ? "Connecting..." : "Sign in with GitHub"}
           </button>
+          {authError ? (
+            <p className="form-error compact" role="alert">
+              {authError}
+            </p>
+          ) : null}
         </div>
       </header>
 
       <div className="dashboard-main">
-        <Leaderboard members={sampleMembers} selectedRange={selectedRange} onRangeChange={setSelectedRange} />
+        <Leaderboard members={leaderboardMembers} selectedRange={selectedRange} onRangeChange={setSelectedRange} />
 
         <aside className="dashboard-sidebar" aria-label="Dashboard controls">
           <section className="panel group-panel" aria-labelledby="groups-title">
@@ -82,35 +293,59 @@ export function Dashboard({ accessToken = null }: DashboardProps) {
               </div>
             </div>
 
-            <form className="control-form" onSubmit={preventPlaceholderSubmit}>
+            <form className="control-form" onSubmit={submitGroup}>
               <label htmlFor="group-name">Group name</label>
               <div className="inline-controls">
-                <input id="group-name" name="groupName" placeholder="Team usage" />
-                <button type="submit" className="primary">
+                <input
+                  id="group-name"
+                  name="groupName"
+                  placeholder="Team usage"
+                  value={groupName}
+                  onChange={(event) => setGroupName(event.target.value)}
+                />
+                <button type="submit" className="primary" disabled={isCreatingGroup}>
                   <Plus size={16} aria-hidden="true" />
-                  Create group
+                  {isCreatingGroup ? "Creating..." : "Create group"}
                 </button>
               </div>
             </form>
 
-            <form className="control-form" onSubmit={preventPlaceholderSubmit}>
+            <form className="control-form" onSubmit={submitInvite}>
               <label htmlFor="invite-code">Invite code</label>
               <div className="inline-controls">
-                <input id="invite-code" name="inviteCode" placeholder="ABCD-1234" />
-                <button type="submit">
+                <input
+                  id="invite-code"
+                  name="inviteCode"
+                  placeholder="ABCD-1234"
+                  value={inviteCode}
+                  onChange={(event) => setInviteCode(event.target.value)}
+                />
+                <button type="submit" disabled={isJoiningGroup}>
                   <LogIn size={16} aria-hidden="true" />
-                  Join
+                  {isJoiningGroup ? "Joining..." : "Join"}
                 </button>
               </div>
             </form>
+
+            {groupError ? (
+              <p className="form-error" role="alert">
+                {groupError}
+              </p>
+            ) : null}
+            {groupStatus ? <p className="form-success">{groupStatus}</p> : null}
 
             <div className="group-meta">
               <Users size={15} aria-hidden="true" />
-              Sample group: 3 members
+              {activeGroup ? `Current group: ${activeGroup.name}` : "Sample group: 3 members"}
             </div>
           </section>
 
-          <CollectorSetup accessToken={accessToken} />
+          {leaderboardError ? (
+            <p className="form-error" role="alert">
+              {leaderboardError}
+            </p>
+          ) : null}
+          <CollectorSetup accessToken={effectiveAccessToken} />
         </aside>
       </div>
     </main>
