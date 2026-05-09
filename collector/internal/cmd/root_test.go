@@ -82,10 +82,10 @@ func TestStatusPrintsServerAndHidesToken(t *testing.T) {
 		t.Fatalf("status returned error: %v", err)
 	}
 	if !strings.Contains(stdout, "Server: https://tokens.example.test") {
-		t.Fatalf("expected server URL in status, got %q", stdout)
+		t.Fatal("expected server URL in status output")
 	}
 	if !strings.Contains(stdout, "Token: configured") {
-		t.Fatalf("expected configured token status, got %q", stdout)
+		t.Fatal("expected configured token status")
 	}
 	if strings.Contains(stdout, "secret-device-token") {
 		t.Fatal("status printed the raw device token")
