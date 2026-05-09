@@ -23,6 +23,9 @@ type Client struct {
 }
 
 func (c *Client) Sync(ctx context.Context, rows []aggregate.DailyUsage) error {
+	if c == nil {
+		return errors.New("sync client is required")
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}

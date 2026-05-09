@@ -65,7 +65,7 @@ func TestClientPostsRowsWithBearerTokenAndExpectedBody(t *testing.T) {
 		t.Fatalf("unexpected sync URL: %s", gotURL)
 	}
 	if gotAuthorization != "Bearer secret-device-token" {
-		t.Fatalf("unexpected authorization header: %q", gotAuthorization)
+		t.Fatal("unexpected authorization header")
 	}
 	if gotContentType != "application/json" {
 		t.Fatalf("unexpected content type: %q", gotContentType)
@@ -75,7 +75,7 @@ func TestClientPostsRowsWithBearerTokenAndExpectedBody(t *testing.T) {
 		Rows []aggregate.DailyUsage `json:"rows"`
 	}
 	if err := json.Unmarshal(gotBody, &got); err != nil {
-		t.Fatalf("request body was not expected JSON: %v\n%s", err, gotBody)
+		t.Fatalf("request body was not expected JSON: %v", err)
 	}
 	if len(got.Rows) != 1 {
 		t.Fatalf("expected one row in request body, got %d", len(got.Rows))
@@ -134,10 +134,22 @@ func TestClientReturnsSanitizedNon2xxError(t *testing.T) {
 		t.Fatalf("expected useful status error, got %q", message)
 	}
 	if strings.Contains(message, token) {
-		t.Fatalf("sync error leaked token: %q", message)
+		t.Fatal("sync error leaked token")
 	}
 	if strings.Contains(message, bodyValue) || strings.Contains(message, "bad token") {
-		t.Fatalf("sync error leaked request or response body: %q", message)
+		t.Fatal("sync error leaked request or response body")
+	}
+}
+
+func TestNilClientReturnsValidationError(t *testing.T) {
+	var client *Client
+
+	err := client.Sync(context.Background(), nil)
+	if err == nil {
+		t.Fatal("expected nil client error")
+	}
+	if !strings.Contains(err.Error(), "sync client is required") {
+		t.Fatalf("expected sync client validation error, got %q", err.Error())
 	}
 }
 
@@ -159,6 +171,6 @@ func TestClientValidatesRequiredFieldsBeforeRequest(t *testing.T) {
 		t.Fatal("client made a request before validating required fields")
 	}
 	if strings.Contains(err.Error(), "https://tokens.example.test") {
-		t.Fatalf("validation error leaked server URL: %v", err)
+		t.Fatal("validation error leaked server URL")
 	}
 }

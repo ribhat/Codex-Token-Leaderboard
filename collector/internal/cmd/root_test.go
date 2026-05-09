@@ -103,7 +103,7 @@ func TestPreviewReturnsSanitizedErrors(t *testing.T) {
 		t.Fatal("expected preview to fail for missing session directory")
 	}
 	if strings.Contains(err.Error(), privateRoot) {
-		t.Fatalf("preview error leaked sessions path: %v", err)
+		t.Fatal("preview error leaked sessions path")
 	}
 
 	sessionsPath := filepath.Join(t.TempDir(), "sessions")
@@ -120,7 +120,7 @@ func TestPreviewReturnsSanitizedErrors(t *testing.T) {
 		t.Fatal("expected preview to fail for malformed session file")
 	}
 	if strings.Contains(err.Error(), privateFile) || strings.Contains(err.Error(), sessionsPath) {
-		t.Fatalf("preview parse error leaked local path: %v", err)
+		t.Fatal("preview parse error leaked local path")
 	}
 }
 
@@ -195,7 +195,7 @@ func TestSyncUploadsLocalAggregateAndPrintsRowCount(t *testing.T) {
 			Rows []aggregate.DailyUsage `json:"rows"`
 		}
 		if err := json.Unmarshal(body, &payload); err != nil {
-			t.Fatalf("decode request body: %v\n%s", err, body)
+			t.Fatalf("decode request body: %v", err)
 		}
 		gotRows = payload.Rows
 		w.WriteHeader(http.StatusNoContent)
@@ -221,13 +221,13 @@ func TestSyncUploadsLocalAggregateAndPrintsRowCount(t *testing.T) {
 		t.Fatalf("expected sync row count, got %q", stdout)
 	}
 	if strings.Contains(stdout, token) || strings.Contains(stdout, sessionFile) || strings.Contains(stdout, sessionsPath) {
-		t.Fatalf("sync output leaked sensitive data: %q", stdout)
+		t.Fatal("sync output leaked sensitive data")
 	}
 	if gotPath != "/api/collector/sync" {
 		t.Fatalf("expected sync path, got %s", gotPath)
 	}
 	if gotAuthorization != "Bearer "+token {
-		t.Fatalf("unexpected authorization header: %q", gotAuthorization)
+		t.Fatal("unexpected authorization header")
 	}
 	if gotContentType != "application/json" {
 		t.Fatalf("unexpected content type: %q", gotContentType)
@@ -252,6 +252,6 @@ func TestSyncReportsNotLoggedInCleanlyWhenConfigMissing(t *testing.T) {
 		t.Fatalf("expected not logged in error, got %q", message)
 	}
 	if strings.Contains(message, configPath) || strings.Contains(stdout, configPath) {
-		t.Fatalf("sync leaked config path in not logged in output: stdout=%q err=%q", stdout, message)
+		t.Fatal("sync leaked config path in not logged in output")
 	}
 }
