@@ -8,6 +8,7 @@ coverage/
 .env.*.local
 dist/
 bin/
+.tools/
 *.exe
 *.test
 .superpowers/
