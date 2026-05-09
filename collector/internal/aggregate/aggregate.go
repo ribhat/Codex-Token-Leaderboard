@@ -11,15 +11,15 @@ const SourceCodexJSONL = "codex-jsonl"
 type DailyUsage struct {
 	UsageDate             string `json:"usageDate"`
 	Source                string `json:"source"`
-	TotalTokens           int    `json:"totalTokens"`
-	InputTokens           int    `json:"inputTokens"`
-	CachedInputTokens     int    `json:"cachedInputTokens"`
-	OutputTokens          int    `json:"outputTokens"`
-	ReasoningOutputTokens int    `json:"reasoningOutputTokens"`
+	TotalTokens           int64  `json:"totalTokens"`
+	InputTokens           int64  `json:"inputTokens"`
+	CachedInputTokens     int64  `json:"cachedInputTokens"`
+	OutputTokens          int64  `json:"outputTokens"`
+	ReasoningOutputTokens int64  `json:"reasoningOutputTokens"`
 	ResponseCount         int    `json:"responseCount"`
 }
 
-func DailyTotals(events []codex.Event) []DailyUsage {
+func Daily(events []codex.UsageEvent) []DailyUsage {
 	byDate := make(map[string]*DailyUsage)
 
 	for _, event := range events {

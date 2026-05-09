@@ -9,8 +9,8 @@ import (
 	"github.com/codex-token-leaderboard/collector/internal/codex"
 )
 
-func TestDailyTotalsAggregatesByUTCDate(t *testing.T) {
-	events := []codex.Event{
+func TestDailyAggregatesByUTCDate(t *testing.T) {
+	events := []codex.UsageEvent{
 		{
 			Timestamp: time.Date(2026, 5, 9, 23, 30, 0, 0, time.UTC),
 			Usage: codex.TokenUsage{
@@ -43,7 +43,7 @@ func TestDailyTotalsAggregatesByUTCDate(t *testing.T) {
 		},
 	}
 
-	rows := DailyTotals(events)
+	rows := Daily(events)
 
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 daily rows, got %d", len(rows))
@@ -87,8 +87,30 @@ func TestDailyTotalsAggregatesByUTCDate(t *testing.T) {
 	}
 }
 
-func TestDailyTotalsDoesNotRetainPrivateFields(t *testing.T) {
-	rows := DailyTotals([]codex.Event{
+func TestDailyKeepsLargeTokenCounts(t *testing.T) {
+	rows := Daily([]codex.UsageEvent{
+		{
+			Timestamp: time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC),
+			Usage: codex.TokenUsage{
+				TotalTokens:           3_000_000_000,
+				InputTokens:           2_000_000_000,
+				CachedInputTokens:     1_000_000_000,
+				OutputTokens:          700_000_000,
+				ReasoningOutputTokens: 300_000_000,
+			},
+		},
+	})
+
+	if len(rows) != 1 {
+		t.Fatalf("expected one row, got %d", len(rows))
+	}
+	if rows[0].TotalTokens != 3_000_000_000 {
+		t.Fatalf("expected large total token count, got %d", rows[0].TotalTokens)
+	}
+}
+
+func TestDailyDoesNotRetainPrivateFields(t *testing.T) {
+	rows := Daily([]codex.UsageEvent{
 		{
 			Timestamp: time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC),
 			Usage: codex.TokenUsage{

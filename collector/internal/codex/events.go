@@ -10,14 +10,14 @@ import (
 )
 
 type TokenUsage struct {
-	TotalTokens           int `json:"totalTokens"`
-	InputTokens           int `json:"inputTokens"`
-	CachedInputTokens     int `json:"cachedInputTokens"`
-	OutputTokens          int `json:"outputTokens"`
-	ReasoningOutputTokens int `json:"reasoningOutputTokens"`
+	TotalTokens           int64 `json:"totalTokens"`
+	InputTokens           int64 `json:"inputTokens"`
+	CachedInputTokens     int64 `json:"cachedInputTokens"`
+	OutputTokens          int64 `json:"outputTokens"`
+	ReasoningOutputTokens int64 `json:"reasoningOutputTokens"`
 }
 
-type Event struct {
+type UsageEvent struct {
 	Timestamp time.Time  `json:"timestamp"`
 	Usage     TokenUsage `json:"usage"`
 }
@@ -32,16 +32,16 @@ type jsonlEvent struct {
 }
 
 type jsonlTokenUsage struct {
-	TotalTokens           int `json:"total_tokens"`
-	InputTokens           int `json:"input_tokens"`
-	CachedInputTokens     int `json:"cached_input_tokens"`
-	OutputTokens          int `json:"output_tokens"`
-	ReasoningOutputTokens int `json:"reasoning_output_tokens"`
+	TotalTokens           int64 `json:"total_tokens"`
+	InputTokens           int64 `json:"input_tokens"`
+	CachedInputTokens     int64 `json:"cached_input_tokens"`
+	OutputTokens          int64 `json:"output_tokens"`
+	ReasoningOutputTokens int64 `json:"reasoning_output_tokens"`
 }
 
-func ParseEvents(r io.Reader) ([]Event, error) {
+func ParseUsageEvents(r io.Reader) ([]UsageEvent, error) {
 	reader := bufio.NewReader(r)
-	var events []Event
+	var events []UsageEvent
 	lineNumber := 0
 
 	for {
@@ -67,25 +67,25 @@ func ParseEvents(r io.Reader) ([]Event, error) {
 	return events, nil
 }
 
-func parseLine(line string) (Event, bool, error) {
+func parseLine(line string) (UsageEvent, bool, error) {
 	if strings.TrimSpace(line) == "" {
-		return Event{}, false, nil
+		return UsageEvent{}, false, nil
 	}
 
 	var raw jsonlEvent
 	if err := json.Unmarshal([]byte(line), &raw); err != nil {
-		return Event{}, false, err
+		return UsageEvent{}, false, err
 	}
 	if raw.Timestamp == "" || raw.Payload.Info.LastTokenUsage == nil {
-		return Event{}, false, nil
+		return UsageEvent{}, false, nil
 	}
 
 	timestamp, err := time.Parse(time.RFC3339Nano, raw.Timestamp)
 	if err != nil {
-		return Event{}, false, fmt.Errorf("invalid timestamp %q: %w", raw.Timestamp, err)
+		return UsageEvent{}, false, fmt.Errorf("invalid timestamp %q: %w", raw.Timestamp, err)
 	}
 
-	return Event{
+	return UsageEvent{
 		Timestamp: timestamp,
 		Usage: TokenUsage{
 			TotalTokens:           raw.Payload.Info.LastTokenUsage.TotalTokens,

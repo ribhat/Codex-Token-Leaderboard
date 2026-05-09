@@ -12,16 +12,16 @@ import (
 	"time"
 )
 
-func TestParseEventsReadsUsageAndSkipsIncompleteLines(t *testing.T) {
+func TestParseUsageEventsReadsUsageAndSkipsIncompleteLines(t *testing.T) {
 	f, err := os.Open(filepath.Join("testdata", "session.jsonl"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer f.Close()
 
-	events, err := ParseEvents(f)
+	events, err := ParseUsageEvents(f)
 	if err != nil {
-		t.Fatalf("ParseEvents returned error: %v", err)
+		t.Fatalf("ParseUsageEvents returned error: %v", err)
 	}
 
 	if len(events) != 2 {
@@ -50,16 +50,16 @@ func TestParseEventsReadsUsageAndSkipsIncompleteLines(t *testing.T) {
 	}
 }
 
-func TestParseEventsDoesNotRetainPrivateFields(t *testing.T) {
+func TestParseUsageEventsDoesNotRetainPrivateFields(t *testing.T) {
 	f, err := os.Open(filepath.Join("testdata", "session.jsonl"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer f.Close()
 
-	events, err := ParseEvents(f)
+	events, err := ParseUsageEvents(f)
 	if err != nil {
-		t.Fatalf("ParseEvents returned error: %v", err)
+		t.Fatalf("ParseUsageEvents returned error: %v", err)
 	}
 
 	encoded, err := json.Marshal(events)
@@ -82,31 +82,46 @@ func TestParseEventsDoesNotRetainPrivateFields(t *testing.T) {
 	}
 }
 
-func TestParseEventsReturnsMalformedJSONError(t *testing.T) {
-	_, err := ParseEvents(strings.NewReader("{not json}\n"))
+func TestParseUsageEventsReturnsMalformedJSONError(t *testing.T) {
+	_, err := ParseUsageEvents(strings.NewReader("{not json}\n"))
 	if err == nil {
 		t.Fatal("expected malformed JSON error")
 	}
 }
 
-func TestParseEventsReturnsInvalidTimestampError(t *testing.T) {
+func TestParseUsageEventsReturnsInvalidTimestampError(t *testing.T) {
 	input := `{"timestamp":"not-a-time","payload":{"info":{"last_token_usage":{"total_tokens":1}}}}` + "\n"
 
-	_, err := ParseEvents(strings.NewReader(input))
+	_, err := ParseUsageEvents(strings.NewReader(input))
 	if err == nil {
 		t.Fatal("expected invalid timestamp error")
 	}
 }
 
-func TestParseEventsSkipsBlankLines(t *testing.T) {
+func TestParseUsageEventsSkipsBlankLines(t *testing.T) {
 	input := bytes.NewBufferString("\n  \n")
 
-	events, err := ParseEvents(input)
+	events, err := ParseUsageEvents(input)
 	if err != nil {
-		t.Fatalf("ParseEvents returned error: %v", err)
+		t.Fatalf("ParseUsageEvents returned error: %v", err)
 	}
 	if len(events) != 0 {
 		t.Fatalf("expected no events, got %d", len(events))
+	}
+}
+
+func TestParseUsageEventsKeepsLargeTokenCounts(t *testing.T) {
+	input := `{"timestamp":"2026-05-09T00:00:00Z","payload":{"info":{"last_token_usage":{"total_tokens":3000000000,"input_tokens":2000000000,"cached_input_tokens":1000000000,"output_tokens":700000000,"reasoning_output_tokens":300000000}}}}` + "\n"
+
+	events, err := ParseUsageEvents(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("ParseUsageEvents returned error: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected one event, got %d", len(events))
+	}
+	if events[0].Usage.TotalTokens != 3_000_000_000 {
+		t.Fatalf("expected large total token count, got %d", events[0].Usage.TotalTokens)
 	}
 }
 
