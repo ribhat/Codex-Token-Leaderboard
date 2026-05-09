@@ -36,6 +36,30 @@ describe("collectorService", () => {
     expect(stored.tokenHash).not.toBe("plain-device-token");
   });
 
+  it("generates a device token and stores a lookup hash when no token is provided", async () => {
+    const repo = new MemoryRepository();
+    await repo.upsertProfile(ada);
+
+    const result = await createCollectorDevice({
+      repo,
+      userId: ada.id,
+      platform: "linux",
+      deviceLabel: null,
+      now
+    });
+
+    expect(result.token).toEqual(expect.any(String));
+    expect(result.token).not.toBe("");
+    expect("tokenHash" in result.device).toBe(false);
+
+    const stored = await repo.getCollectorDeviceByTokenHash(await hashToken(result.token));
+    expect(stored).toMatchObject({
+      id: result.device.id,
+      userId: ada.id,
+      platform: "linux"
+    });
+  });
+
   it("rejects blank injected collector tokens", async () => {
     const repo = new MemoryRepository();
     await repo.upsertProfile(ada);
@@ -79,9 +103,24 @@ describe("collectorService", () => {
     await expect(syncUsage({ repo, bearerToken: "wrong-token", rows: [], now })).rejects.toThrow(
       "Collector token is invalid"
     );
+    expect(repo.syncEvents.at(-1)).toMatchObject({
+      deviceId: null,
+      userId: null,
+      success: false,
+      message: "Collector token is invalid",
+      daysSynced: 0
+    });
+
     await expect(syncUsage({ repo, bearerToken: "valid-token", rows: [], now })).rejects.toThrow(
       "Collector token is revoked"
     );
+    expect(repo.syncEvents.at(-1)).toMatchObject({
+      deviceId: created.device.id,
+      userId: ada.id,
+      success: false,
+      message: "Collector token is revoked",
+      daysSynced: 0
+    });
   });
 
   it("upserts daily usage idempotently and marks device seen", async () => {
