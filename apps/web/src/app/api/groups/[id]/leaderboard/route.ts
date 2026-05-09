@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiErrorResponse } from "@/lib/apiErrors";
 import { createSupabaseServiceClient, getUserIdFromRequest } from "@/lib/auth";
 import { getLeaderboard } from "@/lib/leaderboardService";
 import { SupabaseRepository } from "@/lib/supabaseRepository";
@@ -16,12 +17,12 @@ function isLeaderboardRange(value: string): value is LeaderboardRange {
 
 export async function GET(request: Request, { params }: RouteContext) {
   try {
+    const viewerId = await getUserIdFromRequest(request);
     const range = new URL(request.url).searchParams.get("range") ?? "today";
     if (!isLeaderboardRange(range)) {
       return NextResponse.json({ error: "Invalid leaderboard range" }, { status: 400 });
     }
 
-    const viewerId = await getUserIdFromRequest(request);
     const { id } = await params;
     const repo = new SupabaseRepository(createSupabaseServiceClient());
     const result = await getLeaderboard({
@@ -34,6 +35,6 @@ export async function GET(request: Request, { params }: RouteContext) {
 
     return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 400 });
+    return apiErrorResponse(error);
   }
 }

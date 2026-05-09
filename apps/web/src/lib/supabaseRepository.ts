@@ -75,6 +75,19 @@ type UsageDailyRow = {
   updated_at: string;
 };
 
+type UsageDailyUpsertRow = {
+  user_id: string;
+  usage_date: string;
+  source: string;
+  total_tokens: number;
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
+  reasoning_output_tokens: number;
+  response_count: number;
+  updated_at: string;
+};
+
 type SyncEventRow = {
   id: string;
   device_id: string | null;
@@ -174,6 +187,28 @@ function profileFromJoin(row: GroupMemberWithProfileRow) {
     throw new Error(`Missing profile for ${row.user_id}`);
   }
   return profile;
+}
+
+function dedupeUsageRows(userId: UserId, rows: UsageAggregateInput[], now: string) {
+  const upsertRows = new Map<string, UsageDailyUpsertRow>();
+
+  for (const row of rows) {
+    const source = row.source ?? "codex-jsonl";
+    upsertRows.set(`${row.usageDate}\0${source}`, {
+      user_id: userId,
+      usage_date: row.usageDate,
+      source,
+      total_tokens: row.totalTokens,
+      input_tokens: row.inputTokens,
+      cached_input_tokens: row.cachedInputTokens,
+      output_tokens: row.outputTokens,
+      reasoning_output_tokens: row.reasoningOutputTokens,
+      response_count: row.responseCount,
+      updated_at: now
+    });
+  }
+
+  return Array.from(upsertRows.values());
 }
 
 export class SupabaseRepository implements AppRepository {
@@ -330,18 +365,7 @@ export class SupabaseRepository implements AppRepository {
       return [];
     }
 
-    const upsertRows = rows.map((row) => ({
-      user_id: userId,
-      usage_date: row.usageDate,
-      source: row.source ?? "codex-jsonl",
-      total_tokens: row.totalTokens,
-      input_tokens: row.inputTokens,
-      cached_input_tokens: row.cachedInputTokens,
-      output_tokens: row.outputTokens,
-      reasoning_output_tokens: row.reasoningOutputTokens,
-      response_count: row.responseCount,
-      updated_at: now
-    }));
+    const upsertRows = dedupeUsageRows(userId, rows, now);
 
     const { data, error } = (await this.supabase
       .from("usage_daily")

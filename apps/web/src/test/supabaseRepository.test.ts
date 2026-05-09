@@ -38,6 +38,19 @@ class DuplicateInsertBuilder {
   }
 }
 
+class UsageDailyUpsertBuilder {
+  payload: unknown[] | null = null;
+
+  upsert(payload: unknown[]) {
+    this.payload = payload;
+    return this;
+  }
+
+  async select() {
+    return { data: this.payload, error: null };
+  }
+}
+
 describe("SupabaseRepository", () => {
   it("returns an existing group membership instead of overwriting role or joinedAt", async () => {
     const client = {
@@ -92,5 +105,72 @@ describe("SupabaseRepository", () => {
       joinedAt: "2026-05-08T12:00:00.000Z"
     });
     expect(calls).toBe(3);
+  });
+
+  it("dedupes duplicate usage rows before upserting with the last row winning", async () => {
+    const usageBuilder = new UsageDailyUpsertBuilder();
+    const client = {
+      from(tableName: string) {
+        expect(tableName).toBe("usage_daily");
+        return usageBuilder;
+      }
+    };
+    const repo = new SupabaseRepository(client);
+
+    const result = await repo.upsertUsageDaily(
+      "user-1",
+      [
+        {
+          usageDate: "2026-05-08",
+          source: "codex-jsonl",
+          totalTokens: 100,
+          inputTokens: 30,
+          cachedInputTokens: 10,
+          outputTokens: 40,
+          reasoningOutputTokens: 20,
+          responseCount: 2
+        },
+        {
+          usageDate: "2026-05-08",
+          source: "codex-jsonl",
+          totalTokens: 150,
+          inputTokens: 50,
+          cachedInputTokens: 15,
+          outputTokens: 60,
+          reasoningOutputTokens: 25,
+          responseCount: 3
+        }
+      ],
+      "2026-05-08T12:00:00.000Z"
+    );
+
+    expect(usageBuilder.payload).toEqual([
+      {
+        user_id: "user-1",
+        usage_date: "2026-05-08",
+        source: "codex-jsonl",
+        total_tokens: 150,
+        input_tokens: 50,
+        cached_input_tokens: 15,
+        output_tokens: 60,
+        reasoning_output_tokens: 25,
+        response_count: 3,
+        updated_at: "2026-05-08T12:00:00.000Z"
+      }
+    ]);
+    expect(result).toEqual([
+      {
+        userId: "user-1",
+        usageDate: "2026-05-08",
+        source: "codex-jsonl",
+        totalTokens: 150,
+        inputTokens: 50,
+        cachedInputTokens: 15,
+        outputTokens: 60,
+        reasoningOutputTokens: 25,
+        responseCount: 3,
+        updatedAt: "2026-05-08T12:00:00.000Z"
+      }
+    ]);
   });
 });

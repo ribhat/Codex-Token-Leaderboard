@@ -130,6 +130,63 @@ describe("api route adapters", () => {
     expect(getLeaderboard).not.toHaveBeenCalled();
   });
 
+  it("returns 401 for unauthenticated group creation requests", async () => {
+    mocks.getUserIdFromRequest.mockRejectedValue(new Error("Authentication is required"));
+
+    const response = await createGroupPost(
+      new Request("http://localhost/api/groups", {
+        method: "POST",
+        body: JSON.stringify({ name: "Builders", timezone: "UTC" })
+      })
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: "Authentication is required" });
+    expect(createGroup).not.toHaveBeenCalled();
+  });
+
+  it("returns 401 for unauthenticated group join requests", async () => {
+    mocks.getUserIdFromRequest.mockRejectedValue(new Error("Authentication is required"));
+
+    const response = await joinGroupPost(
+      new Request("http://localhost/api/groups/join", {
+        method: "POST",
+        body: JSON.stringify({ inviteCode: "invite-code" })
+      })
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: "Authentication is required" });
+    expect(joinGroup).not.toHaveBeenCalled();
+  });
+
+  it("authenticates leaderboard requests before validating route-specific query params", async () => {
+    mocks.getUserIdFromRequest.mockRejectedValue(new Error("Authentication is required"));
+
+    const response = await leaderboardGet(new Request("http://localhost/api/groups/group-1/leaderboard?range=bad"), {
+      params: Promise.resolve({ id: "group-1" })
+    });
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: "Authentication is required" });
+    expect(getLeaderboard).not.toHaveBeenCalled();
+  });
+
+  it("returns 401 for unauthenticated collector device creation requests", async () => {
+    mocks.getUserIdFromRequest.mockRejectedValue(new Error("Authentication is required"));
+
+    const response = await createDevicePost(
+      new Request("http://localhost/api/collector/devices", {
+        method: "POST",
+        body: JSON.stringify({ platform: "windows" })
+      })
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: "Authentication is required" });
+    expect(createCollectorDevice).not.toHaveBeenCalled();
+  });
+
   it("loads leaderboards with a default today range", async () => {
     mocks.getLeaderboard.mockResolvedValue({
       rows: [{ rank: 1, userId: "user-1", displayName: "Ada", totalTokens: 10 }]

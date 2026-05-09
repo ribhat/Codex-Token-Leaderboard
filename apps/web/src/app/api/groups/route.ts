@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiErrorResponse } from "@/lib/apiErrors";
 import { createGroup } from "@/lib/groupService";
 import { createSupabaseServiceClient, getUserIdFromRequest } from "@/lib/auth";
 import { SupabaseRepository } from "@/lib/supabaseRepository";
@@ -18,6 +19,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 400 });
+    return apiErrorResponse(error);
   }
 }
