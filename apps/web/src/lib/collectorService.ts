@@ -92,19 +92,13 @@ function normalizeUsageRows(rows: unknown): UsageAggregateInput[] {
       throw new Error("Invalid usage payload");
     }
 
-    const sourceValue = row.source;
-    if (sourceValue != null && typeof sourceValue !== "string") {
-      throw new Error("Invalid usage payload");
-    }
-
-    const source = sourceValue?.trim() ?? "codex-jsonl";
-    if (!source) {
+    if (row.source != null && typeof row.source !== "string") {
       throw new Error("Invalid usage payload");
     }
 
     return {
       usageDate: row.usageDate,
-      source,
+      source: "codex-jsonl",
       totalTokens,
       inputTokens,
       cachedInputTokens,

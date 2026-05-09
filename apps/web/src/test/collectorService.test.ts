@@ -207,6 +207,43 @@ describe("collectorService", () => {
     expect(repo.syncEvents.filter((event) => event.success)).toHaveLength(2);
   });
 
+  it("normalizes submitted sources to the v1 collector source before upserting", async () => {
+    const repo = new MemoryRepository();
+    await repo.upsertProfile(ada);
+    await createCollectorDevice({
+      repo,
+      userId: ada.id,
+      platform: "windows",
+      deviceLabel: null,
+      now,
+      token: "valid-token"
+    });
+
+    const firstResult = await syncUsage({
+      repo,
+      bearerToken: "valid-token",
+      rows: [{ ...validRow, source: "leaky-local-path" }],
+      now
+    });
+    const secondResult = await syncUsage({
+      repo,
+      bearerToken: "valid-token",
+      rows: [{ ...validRow, source: "alternate-source", totalTokens: 250 }],
+      now: "2026-05-08T13:00:00.000Z"
+    });
+
+    expect(firstResult.rows[0].source).toBe("codex-jsonl");
+    expect(secondResult.rows[0].source).toBe("codex-jsonl");
+    expect(Array.from(repo.usage.values())).toHaveLength(1);
+    expect(Array.from(repo.usage.values())[0]).toMatchObject({
+      usageDate: "2026-05-08",
+      source: "codex-jsonl",
+      totalTokens: 250
+    });
+    expect(Array.from(repo.usage.values())[0].source).not.toBe("leaky-local-path");
+    expect(Array.from(repo.usage.values())[0].source).not.toBe("alternate-source");
+  });
+
   it("rejects invalid usage payloads before upsert and records a failed sync event", async () => {
     const cases = [
       { name: "negative token count", row: { ...validRow, totalTokens: -1 } },
@@ -215,8 +252,7 @@ describe("collectorService", () => {
       { name: "oversized response count", row: { ...validRow, responseCount: 2_147_483_648 } },
       { name: "oversized token count", row: { ...validRow, totalTokens: Number.MAX_SAFE_INTEGER + 1 } },
       { name: "invalid date", row: { ...validRow, usageDate: "2026-02-30" } },
-      { name: "fractional response count", row: { ...validRow, responseCount: 1.5 } },
-      { name: "blank source", row: { ...validRow, source: "  " } }
+      { name: "fractional response count", row: { ...validRow, responseCount: 1.5 } }
     ];
 
     for (const testCase of cases) {
