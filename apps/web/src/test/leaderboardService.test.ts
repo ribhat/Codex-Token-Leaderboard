@@ -85,6 +85,7 @@ describe("leaderboardService", () => {
 
     expect(result.rows.map((row) => row.displayName)).toEqual(["Grace", "Ada"]);
     expect(result.rows[0]).toMatchObject({ rank: 1, isExactTotalHidden: true, totalTokens: null });
+    expect("rawTotalTokens" in result.rows[0]).toBe(false);
     expect(result.rows[1]).toMatchObject({ rank: 2, isExactTotalHidden: false, totalTokens: 500 });
   });
 

@@ -1590,10 +1590,13 @@ export type LeaderboardRow = {
   displayName: string;
   avatarUrl: string | null;
   totalTokens: number | null;
-  rawTotalTokens: number;
   isExactTotalHidden: boolean;
   lastSyncedAt: string | null;
   isStale: boolean;
+};
+
+type SortableLeaderboardRow = LeaderboardRow & {
+  rawTotalTokens: number;
 };
 
 type GetLeaderboardArgs = {
@@ -1624,7 +1627,7 @@ export async function getLeaderboard(args: GetLeaderboardArgs): Promise<{ rows: 
 
   return {
     rows: members
-      .map((member) => {
+      .map<SortableLeaderboardRow>((member) => {
         const rawTotalTokens = totals.get(member.userId) ?? 0;
         const lastSyncedAt = latestSeenByUser.get(member.userId) ?? null;
         return {
@@ -1640,7 +1643,10 @@ export async function getLeaderboard(args: GetLeaderboardArgs): Promise<{ rows: 
         };
       })
       .sort((a, b) => b.rawTotalTokens - a.rawTotalTokens || a.displayName.localeCompare(b.displayName))
-      .map((row, index) => ({ ...row, rank: index + 1 }))
+      .map((row, index) => {
+        const { rawTotalTokens: _rawTotalTokens, ...publicRow } = row;
+        return { ...publicRow, rank: index + 1 };
+      })
   };
 }
 ```
