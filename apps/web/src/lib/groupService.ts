@@ -37,19 +37,12 @@ export async function createGroup(args: CreateGroupArgs): Promise<{ group: Publi
   }
 
   const inviteCode = args.inviteCode ?? generateToken(18);
-  const group = await args.repo.createGroup({
+  const group = await args.repo.createGroupWithOwner({
     name: trimmedName,
     creatorId: args.userId,
     inviteCodeHash: await hashToken(inviteCode),
     timezone: args.timezone ?? "UTC",
     now: args.now
-  });
-
-  await args.repo.addGroupMember({
-    groupId: group.id,
-    userId: args.userId,
-    role: "owner",
-    joinedAt: args.now
   });
 
   return { group: toPublicGroup(group), inviteCode };

@@ -22,6 +22,7 @@ type SupabaseResult<T> = {
 
 type SupabaseClientLike = {
   from(tableName: string): any;
+  rpc?(functionName: string, args: Record<string, unknown>): any;
 };
 
 type ProfileRow = {
@@ -251,6 +252,22 @@ export class SupabaseRepository implements AppRepository {
       })
       .select("id,name,creator_id,invite_code_hash,timezone,created_at")
       .single()) as SupabaseResult<GroupRow>;
+    throwIfError(error);
+    return mapGroup(data);
+  }
+
+  async createGroupWithOwner(input: CreateGroupInput) {
+    if (!this.supabase.rpc) {
+      throw new Error("Supabase RPC client is required");
+    }
+
+    const { data, error } = (await this.supabase.rpc("create_group_with_owner", {
+      group_name: input.name,
+      group_creator_id: input.creatorId,
+      group_invite_code_hash: input.inviteCodeHash,
+      group_timezone: input.timezone,
+      group_created_at: input.now
+    })) as SupabaseResult<GroupRow>;
     throwIfError(error);
     return mapGroup(data);
   }

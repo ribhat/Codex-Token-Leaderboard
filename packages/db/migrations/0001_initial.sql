@@ -61,6 +61,31 @@ create table if not exists public.sync_events (
   created_at timestamptz not null default now()
 );
 
+create or replace function public.create_group_with_owner(
+  group_name text,
+  group_creator_id uuid,
+  group_invite_code_hash text,
+  group_timezone text,
+  group_created_at timestamptz
+)
+returns public.groups
+language plpgsql
+set search_path = public
+as $$
+declare
+  created_group public.groups%rowtype;
+begin
+  insert into public.groups (name, creator_id, invite_code_hash, timezone, created_at)
+  values (group_name, group_creator_id, group_invite_code_hash, group_timezone, group_created_at)
+  returning * into created_group;
+
+  insert into public.group_members (group_id, user_id, role, joined_at)
+  values (created_group.id, group_creator_id, 'owner', group_created_at);
+
+  return created_group;
+end;
+$$;
+
 create index if not exists group_members_user_id_idx on public.group_members(user_id);
 create index if not exists collector_devices_user_id_idx on public.collector_devices(user_id);
 create index if not exists usage_daily_date_idx on public.usage_daily(usage_date);

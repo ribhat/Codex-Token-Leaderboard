@@ -187,6 +187,104 @@ describe("api route adapters", () => {
     expect(createCollectorDevice).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["malformed JSON", "{"],
+    ["non-object JSON", "null"],
+    ["non-string timezone", JSON.stringify({ name: "Builders", timezone: 123 })]
+  ])("returns 400 for invalid group creation bodies before calling the service: %s", async (_caseName, body) => {
+    const response = await createGroupPost(
+      new Request("http://localhost/api/groups", {
+        method: "POST",
+        body
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "Invalid request body" });
+    expect(createGroup).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing name", JSON.stringify({ timezone: "UTC" })],
+    ["non-string name", JSON.stringify({ name: 123 })]
+  ])("returns 400 for invalid group names before calling the service: %s", async (_caseName, body) => {
+    const response = await createGroupPost(
+      new Request("http://localhost/api/groups", {
+        method: "POST",
+        body
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "Group name is required" });
+    expect(createGroup).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["malformed JSON", "{"],
+    ["non-object JSON", "null"]
+  ])("returns 400 for invalid group join bodies before calling the service: %s", async (_caseName, body) => {
+    const response = await joinGroupPost(
+      new Request("http://localhost/api/groups/join", {
+        method: "POST",
+        body
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "Invalid request body" });
+    expect(joinGroup).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing inviteCode", JSON.stringify({})],
+    ["non-string inviteCode", JSON.stringify({ inviteCode: 123 })]
+  ])("returns 400 for invalid invite codes before calling the service: %s", async (_caseName, body) => {
+    const response = await joinGroupPost(
+      new Request("http://localhost/api/groups/join", {
+        method: "POST",
+        body
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "Invite code is required" });
+    expect(joinGroup).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["malformed JSON", "{"],
+    ["non-object JSON", "null"],
+    ["invalid deviceLabel", JSON.stringify({ platform: "windows", deviceLabel: 123 })]
+  ])("returns 400 for invalid collector device bodies before calling the service: %s", async (_caseName, body) => {
+    const response = await createDevicePost(
+      new Request("http://localhost/api/collector/devices", {
+        method: "POST",
+        body
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "Invalid request body" });
+    expect(createCollectorDevice).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing platform", JSON.stringify({})],
+    ["non-string platform", JSON.stringify({ platform: 123 })]
+  ])("returns 400 for invalid collector device platforms before calling the service: %s", async (_caseName, body) => {
+    const response = await createDevicePost(
+      new Request("http://localhost/api/collector/devices", {
+        method: "POST",
+        body
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "Platform is required" });
+    expect(createCollectorDevice).not.toHaveBeenCalled();
+  });
+
   it("returns known validation errors as 400 without masking their messages", async () => {
     mocks.createGroup.mockRejectedValue(new Error("Group name is required"));
 

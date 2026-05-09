@@ -52,6 +52,58 @@ class UsageDailyUpsertBuilder {
 }
 
 describe("SupabaseRepository", () => {
+  it("creates a group with owner membership through one atomic RPC", async () => {
+    const groupRow = {
+      id: "group-1",
+      name: "Builders",
+      creator_id: "user-1",
+      invite_code_hash: "invite-hash",
+      timezone: "UTC",
+      created_at: "2026-05-08T12:00:00.000Z"
+    };
+    const client = {
+      calls: [] as Array<{ name: string; args: unknown }>,
+      async rpc(name: string, args: unknown) {
+        this.calls.push({ name, args });
+        return { data: groupRow, error: null };
+      },
+      from() {
+        throw new Error("createGroupWithOwner should not use table builders");
+      }
+    };
+
+    const repo = new SupabaseRepository(client);
+
+    await expect(
+      repo.createGroupWithOwner({
+        name: "Builders",
+        creatorId: "user-1",
+        inviteCodeHash: "invite-hash",
+        timezone: "UTC",
+        now: "2026-05-08T12:00:00.000Z"
+      })
+    ).resolves.toEqual({
+      id: "group-1",
+      name: "Builders",
+      creatorId: "user-1",
+      inviteCodeHash: "invite-hash",
+      timezone: "UTC",
+      createdAt: "2026-05-08T12:00:00.000Z"
+    });
+    expect(client.calls).toEqual([
+      {
+        name: "create_group_with_owner",
+        args: {
+          group_name: "Builders",
+          group_creator_id: "user-1",
+          group_invite_code_hash: "invite-hash",
+          group_timezone: "UTC",
+          group_created_at: "2026-05-08T12:00:00.000Z"
+        }
+      }
+    ]);
+  });
+
   it("returns an existing group membership instead of overwriting role or joinedAt", async () => {
     const client = {
       from(tableName: string) {

@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createGroup, joinGroup } from "@/lib/groupService";
+import type { AppRepository } from "@/lib/repository";
 import { MemoryRepository } from "@/lib/memoryRepository";
 import { hashToken } from "@/lib/crypto";
 import { ada, grace, now } from "./testData";
@@ -25,6 +26,42 @@ describe("groupService", () => {
     await expect(repo.getGroup(result.group.id)).resolves.toMatchObject({
       inviteCodeHash: await hashToken("invite-secret")
     });
+  });
+
+  it("delegates group and owner creation to one repository method", async () => {
+    const group = {
+      id: "group-1",
+      name: "Friday Builders",
+      creatorId: ada.id,
+      inviteCodeHash: await hashToken("invite-secret"),
+      timezone: "UTC",
+      createdAt: now
+    };
+    const repo = {
+      getProfile: vi.fn().mockResolvedValue(ada),
+      createGroup: vi.fn(),
+      createGroupWithOwner: vi.fn().mockResolvedValue(group),
+      addGroupMember: vi.fn()
+    } as unknown as AppRepository;
+
+    await createGroup({
+      repo,
+      userId: ada.id,
+      name: "Friday Builders",
+      timezone: "UTC",
+      now,
+      inviteCode: "invite-secret"
+    });
+
+    expect(repo.createGroupWithOwner).toHaveBeenCalledWith({
+      name: "Friday Builders",
+      creatorId: ada.id,
+      inviteCodeHash: await hashToken("invite-secret"),
+      timezone: "UTC",
+      now
+    });
+    expect(repo.createGroup).not.toHaveBeenCalled();
+    expect(repo.addGroupMember).not.toHaveBeenCalled();
   });
 
   it("joins a group by invite code idempotently", async () => {

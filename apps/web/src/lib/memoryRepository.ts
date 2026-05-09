@@ -57,6 +57,22 @@ export class MemoryRepository implements AppRepository {
     return clone(group);
   }
 
+  async createGroupWithOwner(input: CreateGroupInput) {
+    const group = await this.createGroup(input);
+    try {
+      await this.addGroupMember({
+        groupId: group.id,
+        userId: input.creatorId,
+        role: "owner",
+        joinedAt: input.now
+      });
+    } catch (error) {
+      this.groups.delete(group.id);
+      throw error;
+    }
+    return group;
+  }
+
   async getGroup(groupId: string) {
     const group = this.groups.get(groupId);
     return group ? clone(group) : null;
