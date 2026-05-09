@@ -7,6 +7,10 @@ type CollectorDeviceResponse = {
   token?: string;
 };
 
+type CollectorSetupProps = {
+  accessToken?: string | null;
+};
+
 function getOrigin() {
   if (typeof window === "undefined") {
     return "";
@@ -15,20 +19,32 @@ function getOrigin() {
   return window.location.origin;
 }
 
-export function CollectorSetup() {
+export function CollectorSetup({ accessToken = null }: CollectorSetupProps) {
   const [command, setCommand] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const normalizedAccessToken = accessToken?.trim() ?? "";
+  const canGenerateToken = Boolean(normalizedAccessToken);
 
   async function generateToken() {
+    if (!canGenerateToken) {
+      setError("Sign in with GitHub before generating a collector token.");
+      return;
+    }
+
     setIsGenerating(true);
     setError(null);
     setCommand(null);
 
     try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${normalizedAccessToken}`
+      };
+
       const response = await fetch("/api/collector/devices", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ platform: "web", deviceLabel: "Dashboard browser" })
       });
 
@@ -58,10 +74,21 @@ export function CollectorSetup() {
         </div>
       </div>
 
-      <button type="button" className="primary action-button" onClick={generateToken} disabled={isGenerating}>
+      <button
+        type="button"
+        className="primary action-button"
+        onClick={generateToken}
+        disabled={isGenerating || !canGenerateToken}
+        aria-describedby={canGenerateToken ? undefined : "collector-auth-note"}
+      >
         <KeyRound size={16} aria-hidden="true" />
         {isGenerating ? "Generating..." : "Generate token"}
       </button>
+      {!canGenerateToken ? (
+        <p id="collector-auth-note" className="muted-note">
+          Sign in to generate a collector token.
+        </p>
+      ) : null}
 
       {command ? (
         <div className="command-block" role="status">
@@ -73,7 +100,11 @@ export function CollectorSetup() {
         </div>
       ) : null}
 
-      {error ? <p className="form-error">{error}</p> : null}
+      {error ? (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      ) : null}
     </section>
   );
 }

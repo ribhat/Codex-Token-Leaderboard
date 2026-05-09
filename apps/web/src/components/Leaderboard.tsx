@@ -6,7 +6,7 @@ import type { LeaderboardRange } from "@/lib/types";
 
 export type LeaderboardMember = Pick<
   LeaderboardRow,
-  "rank" | "displayName" | "totalTokens" | "isExactTotalHidden" | "lastSyncedAt" | "isStale"
+  "rank" | "userId" | "displayName" | "avatarUrl" | "totalTokens" | "isExactTotalHidden" | "lastSyncedAt" | "isStale"
 >;
 
 type LeaderboardProps = {
@@ -24,6 +24,13 @@ const ranges: Array<{ value: LeaderboardRange; label: string }> = [
 ];
 
 const numberFormatter = new Intl.NumberFormat("en-US");
+const lastSyncedFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZone: "America/Los_Angeles"
+});
 
 function formatTokens(member: LeaderboardMember) {
   if (member.isExactTotalHidden) {
@@ -42,12 +49,7 @@ function formatLastSynced(value: string | null) {
     return "Never";
   }
 
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit"
-  }).format(new Date(value));
+  return lastSyncedFormatter.format(new Date(value));
 }
 
 export function Leaderboard({ members, selectedRange, onRangeChange }: LeaderboardProps) {
@@ -90,13 +92,17 @@ export function Leaderboard({ members, selectedRange, onRangeChange }: Leaderboa
             </thead>
             <tbody>
               {members.map((member) => (
-                <tr key={`${member.rank}-${member.displayName}`}>
+                <tr key={member.userId}>
                   <td data-label="Rank">#{member.rank}</td>
                   <td data-label="Member">
                     <div className="member-cell">
-                      <span className="avatar" aria-hidden="true">
-                        {member.displayName.slice(0, 1)}
-                      </span>
+                      {member.avatarUrl ? (
+                        <img className="avatar" src={member.avatarUrl} alt="" />
+                      ) : (
+                        <span className="avatar" aria-hidden="true">
+                          {member.displayName.slice(0, 1)}
+                        </span>
+                      )}
                       <span>{member.displayName}</span>
                     </div>
                   </td>

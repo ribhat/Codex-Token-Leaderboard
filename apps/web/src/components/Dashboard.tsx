@@ -1,6 +1,7 @@
 "use client";
 
 import { CircleUserRound, LogIn, Plus, Users } from "lucide-react";
+import type { FormEvent } from "react";
 import { useState } from "react";
 import type { LeaderboardRange } from "@/lib/types";
 import { CollectorSetup } from "./CollectorSetup";
@@ -8,24 +9,30 @@ import { Leaderboard, type LeaderboardMember } from "./Leaderboard";
 
 const sampleMembers: LeaderboardMember[] = [
   {
+    userId: "sample-riley",
     rank: 1,
     displayName: "Riley Chen",
+    avatarUrl: null,
     totalTokens: 12480,
     lastSyncedAt: "2026-05-08T19:42:00-07:00",
     isExactTotalHidden: false,
     isStale: false
   },
   {
+    userId: "sample-sam",
     rank: 2,
     displayName: "Sam Privacy",
+    avatarUrl: null,
     totalTokens: null,
     isExactTotalHidden: true,
     lastSyncedAt: "2026-05-08T18:10:00-07:00",
     isStale: false
   },
   {
+    userId: "sample-morgan",
     rank: 3,
     displayName: "Morgan Stale",
+    avatarUrl: null,
     totalTokens: 3910,
     lastSyncedAt: "2026-05-05T08:30:00-07:00",
     isExactTotalHidden: false,
@@ -33,7 +40,15 @@ const sampleMembers: LeaderboardMember[] = [
   }
 ];
 
-export function Dashboard() {
+type DashboardProps = {
+  accessToken?: string | null;
+};
+
+function preventPlaceholderSubmit(event: FormEvent<HTMLFormElement>) {
+  event.preventDefault();
+}
+
+export function Dashboard({ accessToken = null }: DashboardProps) {
   const [selectedRange, setSelectedRange] = useState<LeaderboardRange>("today");
 
   return (
@@ -67,22 +82,22 @@ export function Dashboard() {
               </div>
             </div>
 
-            <form className="control-form">
+            <form className="control-form" onSubmit={preventPlaceholderSubmit}>
               <label htmlFor="group-name">Group name</label>
               <div className="inline-controls">
                 <input id="group-name" name="groupName" placeholder="Team usage" />
-                <button type="button" className="primary">
+                <button type="submit" className="primary">
                   <Plus size={16} aria-hidden="true" />
                   Create group
                 </button>
               </div>
             </form>
 
-            <form className="control-form">
+            <form className="control-form" onSubmit={preventPlaceholderSubmit}>
               <label htmlFor="invite-code">Invite code</label>
               <div className="inline-controls">
                 <input id="invite-code" name="inviteCode" placeholder="ABCD-1234" />
-                <button type="button">
+                <button type="submit">
                   <LogIn size={16} aria-hidden="true" />
                   Join
                 </button>
@@ -95,7 +110,7 @@ export function Dashboard() {
             </div>
           </section>
 
-          <CollectorSetup />
+          <CollectorSetup accessToken={accessToken} />
         </aside>
       </div>
     </main>

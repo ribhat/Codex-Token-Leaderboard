@@ -39,7 +39,7 @@ describe("Dashboard", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<Dashboard />);
+    render(<Dashboard accessToken="dashboard-token" />);
 
     await user.click(screen.getByRole("button", { name: "Generate token" }));
 
@@ -47,12 +47,28 @@ describe("Dashboard", () => {
       "/api/collector/devices",
       expect.objectContaining({
         method: "POST",
+        headers: expect.objectContaining({ Authorization: "Bearer dashboard-token" }),
         body: expect.stringContaining("\"platform\":\"web\"")
       })
     );
     expect(
       await screen.findByText((text) => text.includes("codex-tokens login --server") && text.includes("device-token"))
     ).toBeInTheDocument();
+  });
+
+  it("does not call the collector token route before sign-in", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<Dashboard />);
+
+    const button = screen.getByRole("button", { name: "Generate token" });
+    expect(button).toBeDisabled();
+    await user.click(button);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText("Sign in to generate a collector token.")).toBeInTheDocument();
   });
 
   it("shows hidden totals and stale sync status in member rows", () => {

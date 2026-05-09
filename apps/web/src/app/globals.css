@@ -344,6 +344,12 @@ h3 {
   font-size: 0.9rem;
 }
 
+.muted-note {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
 .empty-state {
   border-top: 1px solid var(--panel-border);
   padding-top: 24px;
@@ -389,7 +395,13 @@ h3 {
   }
 
   .leaderboard-table thead {
-    display: none;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
   }
 
   .leaderboard-table tr {
