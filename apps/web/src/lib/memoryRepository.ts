@@ -10,11 +10,8 @@ import type {
   UserId
 } from "./types";
 
-let sequence = 0;
-
-function nextId(prefix: string) {
-  sequence += 1;
-  return `${prefix}-${sequence}`;
+function clone<T extends object>(value: T): T {
+  return { ...value };
 }
 
 export class MemoryRepository implements AppRepository {
@@ -25,39 +22,55 @@ export class MemoryRepository implements AppRepository {
   usage = new Map<string, UsageDaily>();
   syncEvents: SyncEvent[] = [];
 
+  private sequence = 0;
+
+  private nextId(prefix: string) {
+    this.sequence += 1;
+    return `${prefix}-${this.sequence}`;
+  }
+
   async getProfile(userId: string) {
-    return this.profiles.get(userId) ?? null;
+    const profile = this.profiles.get(userId);
+    return profile ? clone(profile) : null;
   }
 
   async upsertProfile(profile: Profile) {
-    this.profiles.set(profile.id, profile);
-    return profile;
+    const stored = clone(profile);
+    this.profiles.set(profile.id, stored);
+    return clone(stored);
   }
 
   async createGroup(input: CreateGroupInput) {
+    if (Array.from(this.groups.values()).some((group) => group.inviteCodeHash === input.inviteCodeHash)) {
+      throw new Error("Duplicate invite code hash");
+    }
+
     const group: Group = {
-      id: nextId("group"),
+      id: this.nextId("group"),
       name: input.name,
       creatorId: input.creatorId,
       inviteCodeHash: input.inviteCodeHash,
       timezone: input.timezone,
       createdAt: input.now
     };
-    this.groups.set(group.id, group);
-    return group;
+    this.groups.set(group.id, clone(group));
+    return clone(group);
   }
 
   async getGroup(groupId: string) {
-    return this.groups.get(groupId) ?? null;
+    const group = this.groups.get(groupId);
+    return group ? clone(group) : null;
   }
 
   async getGroupByInviteHash(inviteCodeHash: string) {
-    return Array.from(this.groups.values()).find((group) => group.inviteCodeHash === inviteCodeHash) ?? null;
+    const group = Array.from(this.groups.values()).find((value) => value.inviteCodeHash === inviteCodeHash);
+    return group ? clone(group) : null;
   }
 
   async addGroupMember(member: GroupMember) {
-    this.members.set(`${member.groupId}:${member.userId}`, member);
-    return member;
+    const stored = clone(member);
+    this.members.set(`${member.groupId}:${member.userId}`, stored);
+    return clone(stored);
   }
 
   async isGroupMember(groupId: string, userId: string) {
@@ -72,13 +85,17 @@ export class MemoryRepository implements AppRepository {
         if (!profile) {
           throw new Error(`Missing profile for ${member.userId}`);
         }
-        return { ...member, profile };
+        return { ...clone(member), profile: clone(profile) };
       });
   }
 
   async createCollectorDevice(input: CreateDeviceInput) {
+    if (Array.from(this.devices.values()).some((device) => device.tokenHash === input.tokenHash)) {
+      throw new Error("Duplicate token hash");
+    }
+
     const device: CollectorDevice = {
-      id: nextId("device"),
+      id: this.nextId("device"),
       userId: input.userId,
       tokenHash: input.tokenHash,
       platform: input.platform,
@@ -87,12 +104,13 @@ export class MemoryRepository implements AppRepository {
       revokedAt: null,
       createdAt: input.now
     };
-    this.devices.set(device.id, device);
-    return device;
+    this.devices.set(device.id, clone(device));
+    return clone(device);
   }
 
   async getCollectorDeviceByTokenHash(tokenHash: string) {
-    return Array.from(this.devices.values()).find((device) => device.tokenHash === tokenHash) ?? null;
+    const device = Array.from(this.devices.values()).find((value) => value.tokenHash === tokenHash);
+    return device ? clone(device) : null;
   }
 
   async updateCollectorDeviceSeen(deviceId: string, seenAt: string) {
@@ -117,19 +135,21 @@ export class MemoryRepository implements AppRepository {
         responseCount: row.responseCount,
         updatedAt: now
       };
-      this.usage.set(`${userId}:${row.usageDate}:${source}`, usage);
-      return usage;
+      this.usage.set(`${userId}:${row.usageDate}:${source}`, clone(usage));
+      return clone(usage);
     });
   }
 
   async listUsageForUsers(userIds: string[], startDate: string | null, endDate: string | null) {
     const userSet = new Set(userIds);
-    return Array.from(this.usage.values()).filter((row) => {
-      if (!userSet.has(row.userId)) return false;
-      if (startDate && row.usageDate < startDate) return false;
-      if (endDate && row.usageDate > endDate) return false;
-      return true;
-    });
+    return Array.from(this.usage.values())
+      .filter((row) => {
+        if (!userSet.has(row.userId)) return false;
+        if (startDate && row.usageDate < startDate) return false;
+        if (endDate && row.usageDate > endDate) return false;
+        return true;
+      })
+      .map((row) => clone(row));
   }
 
   async getLatestDeviceSeenByUser(userIds: UserId[]) {
@@ -148,8 +168,8 @@ export class MemoryRepository implements AppRepository {
   }
 
   async createSyncEvent(event: Omit<SyncEvent, "id" | "createdAt"> & { createdAt: string }) {
-    const syncEvent: SyncEvent = { id: nextId("sync"), ...event };
-    this.syncEvents.push(syncEvent);
-    return syncEvent;
+    const syncEvent: SyncEvent = { id: this.nextId("sync"), ...event };
+    this.syncEvents.push(clone(syncEvent));
+    return clone(syncEvent);
   }
 }
