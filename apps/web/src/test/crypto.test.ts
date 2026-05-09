@@ -13,4 +13,10 @@ describe("crypto", () => {
   it("rejects a malformed expected hash without throwing", async () => {
     await expect(tokenMatches("invite-secret", "not-a-hex-hash")).resolves.toBe(false);
   });
+
+  it("rejects a hash with trailing malformed hex", async () => {
+    const hash = await hashToken("invite-secret");
+
+    await expect(tokenMatches("invite-secret", `${hash}zz`)).resolves.toBe(false);
+  });
 });
