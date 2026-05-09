@@ -88,8 +88,18 @@ export function Dashboard({ accessToken = null }: DashboardProps) {
   const [isJoiningGroup, setIsJoiningGroup] = useState(false);
   const [leaderboardMembers, setLeaderboardMembers] = useState<LeaderboardMember[]>(sampleMembers);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
-  const effectiveAccessToken = session?.access_token ?? accessToken?.trim() ?? "";
+  const externalAccessToken = accessToken?.trim() ?? "";
+  const effectiveAccessToken = session?.access_token ?? externalAccessToken;
+  const userScope = session?.user.id ?? (externalAccessToken ? "external-token" : "");
   const signedInName = displayNameFromSession(session);
+
+  const resetPrivateDashboardState = useCallback(() => {
+    setActiveGroup(null);
+    setGroupStatus(null);
+    setGroupError(null);
+    setLeaderboardError(null);
+    setLeaderboardMembers(sampleMembers);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -120,6 +130,10 @@ export function Dashboard({ accessToken = null }: DashboardProps) {
       };
     }
   }, []);
+
+  useEffect(() => {
+    resetPrivateDashboardState();
+  }, [resetPrivateDashboardState, userScope]);
 
   const loadLeaderboard = useCallback(
     async (groupId: string, range: LeaderboardRange, token: string) => {
@@ -160,6 +174,7 @@ export function Dashboard({ accessToken = null }: DashboardProps) {
       if (session) {
         await supabase.auth.signOut();
         setSession(null);
+        resetPrivateDashboardState();
         return;
       }
 

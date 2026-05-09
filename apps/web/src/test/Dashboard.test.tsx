@@ -171,6 +171,53 @@ describe("Dashboard", () => {
     );
   });
 
+  it("clears loaded group and leaderboard state on sign-out", async () => {
+    const user = userEvent.setup();
+    authMocks.getSession.mockResolvedValue({
+      data: {
+        session: {
+          access_token: "session-token",
+          user: { id: "user-1", email: "ada@example.test", user_metadata: { name: "Ada" } }
+        }
+      }
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/groups") {
+        return jsonResponse({
+          group: {
+            id: "group-1",
+            name: "Builders",
+            creatorId: "user-1",
+            timezone: "UTC",
+            createdAt: "2026-05-08T12:00:00.000Z"
+          },
+          inviteCode: "invite-code"
+        });
+      }
+      if (url === "/api/groups/group-1/leaderboard?range=today") {
+        return jsonResponse({ rows: [] });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<Dashboard />);
+
+    expect(await screen.findByRole("button", { name: "Sign out" })).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Group name"), "Builders");
+    await user.click(screen.getByRole("button", { name: "Create group" }));
+    expect(await screen.findByText("Current group: Builders")).toBeInTheDocument();
+    expect(await screen.findByText("No synced members yet")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Sign out" }));
+
+    expect(authMocks.signOut).toHaveBeenCalled();
+    expect(screen.getByText("Sample group: 3 members")).toBeInTheDocument();
+    expect(screen.queryByText("Current group: Builders")).not.toBeInTheDocument();
+    expect(screen.getByText("Riley Chen")).toBeInTheDocument();
+  });
+
   it("does not call the collector token route before sign-in", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn();
