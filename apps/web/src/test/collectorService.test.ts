@@ -210,6 +210,8 @@ describe("collectorService", () => {
   it("rejects invalid usage payloads before upsert and records a failed sync event", async () => {
     const cases = [
       { name: "negative token count", row: { ...validRow, totalTokens: -1 } },
+      { name: "infinite token count", row: { ...validRow, totalTokens: Number.POSITIVE_INFINITY } },
+      { name: "NaN token count", row: { ...validRow, totalTokens: Number.NaN } },
       { name: "invalid date", row: { ...validRow, usageDate: "2026-02-30" } },
       { name: "fractional response count", row: { ...validRow, responseCount: 1.5 } },
       { name: "blank source", row: { ...validRow, source: "  " } }
