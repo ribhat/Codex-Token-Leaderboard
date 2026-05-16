@@ -60,6 +60,11 @@ type GroupResponse = {
   error?: string;
 };
 
+type GroupsResponse = {
+  groups?: PublicGroup[];
+  error?: string;
+};
+
 type LeaderboardResponse = {
   rows?: LeaderboardMember[];
   error?: string;
@@ -81,9 +86,11 @@ export function Dashboard({ accessToken = null }: DashboardProps) {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
+  const [groups, setGroups] = useState<PublicGroup[]>([]);
   const [activeGroup, setActiveGroup] = useState<PublicGroup | null>(null);
   const [groupStatus, setGroupStatus] = useState<string | null>(null);
   const [groupError, setGroupError] = useState<string | null>(null);
+  const [groupListError, setGroupListError] = useState<string | null>(null);
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
   const [isJoiningGroup, setIsJoiningGroup] = useState(false);
   const [leaderboardMembers, setLeaderboardMembers] = useState<LeaderboardMember[]>(sampleMembers);
@@ -95,9 +102,11 @@ export function Dashboard({ accessToken = null }: DashboardProps) {
   const signedInName = displayNameFromSession(session);
 
   const resetPrivateDashboardState = useCallback(() => {
+    setGroups([]);
     setActiveGroup(null);
     setGroupStatus(null);
     setGroupError(null);
+    setGroupListError(null);
     setLeaderboardError(null);
     setLeaderboardMembers(sampleMembers);
   }, []);
@@ -162,6 +171,47 @@ export function Dashboard({ accessToken = null }: DashboardProps) {
     },
     []
   );
+
+  const loadGroups = useCallback(async (token: string, requestedUserScope: string) => {
+    if (!token) {
+      return;
+    }
+
+    setGroupListError(null);
+    const response = await fetch("/api/groups", {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!response.ok) {
+      throw new Error(await readJsonError(response));
+    }
+
+    const payload = (await response.json()) as GroupsResponse;
+    if (userScopeRef.current !== requestedUserScope) {
+      return;
+    }
+
+    const nextGroups = payload.groups ?? [];
+    setGroups(nextGroups);
+    setActiveGroup((currentGroup) => {
+      if (currentGroup && nextGroups.some((group) => group.id === currentGroup.id)) {
+        return currentGroup;
+      }
+      return nextGroups[0] ?? null;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!effectiveAccessToken) {
+      return;
+    }
+
+    loadGroups(effectiveAccessToken, userScope).catch((error) => {
+      if (userScopeRef.current !== userScope) {
+        return;
+      }
+      setGroupListError(error instanceof Error ? error.message : "Groups could not be loaded");
+    });
+  }, [effectiveAccessToken, loadGroups, userScope]);
 
   useEffect(() => {
     if (!activeGroup || !effectiveAccessToken) {
@@ -232,6 +282,11 @@ export function Dashboard({ accessToken = null }: DashboardProps) {
       if (!payload.group) {
         throw new Error("Group could not be created");
       }
+      setGroups((currentGroups) =>
+        currentGroups.some((group) => group.id === payload.group!.id)
+          ? currentGroups.map((group) => (group.id === payload.group!.id ? payload.group! : group))
+          : [...currentGroups, payload.group!]
+      );
       setActiveGroup(payload.group);
       setGroupName("");
       setGroupStatus(
@@ -274,6 +329,11 @@ export function Dashboard({ accessToken = null }: DashboardProps) {
       if (!payload.group) {
         throw new Error("Group could not be joined");
       }
+      setGroups((currentGroups) =>
+        currentGroups.some((group) => group.id === payload.group!.id)
+          ? currentGroups.map((group) => (group.id === payload.group!.id ? payload.group! : group))
+          : [...currentGroups, payload.group!]
+      );
       setActiveGroup(payload.group);
       setInviteCode("");
       setGroupStatus(`Joined ${payload.group.name}.`);
@@ -360,6 +420,30 @@ export function Dashboard({ accessToken = null }: DashboardProps) {
               </p>
             ) : null}
             {groupStatus ? <p className="form-success">{groupStatus}</p> : null}
+            {groupListError ? (
+              <p className="form-error" role="alert">
+                {groupListError}
+              </p>
+            ) : null}
+
+            {groups.length > 1 ? (
+              <div className="control-form">
+                <label htmlFor="active-group">Current group</label>
+                <select
+                  id="active-group"
+                  value={activeGroup?.id ?? ""}
+                  onChange={(event) => {
+                    setActiveGroup(groups.find((group) => group.id === event.target.value) ?? null);
+                  }}
+                >
+                  {groups.map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
 
             <div className="group-meta">
               <Users size={15} aria-hidden="true" />

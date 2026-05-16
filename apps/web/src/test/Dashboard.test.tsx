@@ -133,6 +133,65 @@ describe("Dashboard", () => {
     );
   });
 
+  it("loads existing groups after auth so refreshes return to real leaderboard data", async () => {
+    authMocks.getSession.mockResolvedValue({
+      data: {
+        session: {
+          access_token: "session-token",
+          user: { id: "user-1", email: "ada@example.test", user_metadata: { name: "Ada" } }
+        }
+      }
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/groups") {
+        return jsonResponse({
+          groups: [
+            {
+              id: "group-1",
+              name: "Builders",
+              creatorId: "user-1",
+              timezone: "UTC",
+              createdAt: "2026-05-08T12:00:00.000Z"
+            }
+          ]
+        });
+      }
+      if (url === "/api/groups/group-1/leaderboard?range=today") {
+        return jsonResponse({
+          rows: [
+            {
+              userId: "user-1",
+              rank: 1,
+              displayName: "Ada",
+              avatarUrl: null,
+              totalTokens: 250,
+              isExactTotalHidden: false,
+              lastSyncedAt: "2026-05-08T12:00:00.000Z",
+              isStale: false
+            }
+          ]
+        });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<Dashboard />);
+
+    expect(await screen.findByText("Current group: Builders")).toBeInTheDocument();
+    expect(await screen.findByRole("row", { name: /ada/i })).toBeInTheDocument();
+    expect(screen.queryByText("Riley Chen")).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/groups",
+      expect.objectContaining({ headers: { Authorization: "Bearer session-token" } })
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/groups/group-1/leaderboard?range=today",
+      expect.objectContaining({ headers: { Authorization: "Bearer session-token" } })
+    );
+  });
+
   it("joins a group by invite code through the dashboard API", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

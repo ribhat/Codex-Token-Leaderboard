@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createGroup, joinGroup } from "@/lib/groupService";
+import { createGroup, joinGroup, listGroups } from "@/lib/groupService";
 import type { AppRepository } from "@/lib/repository";
 import { MemoryRepository } from "@/lib/memoryRepository";
 import { hashToken } from "@/lib/crypto";
@@ -105,6 +105,36 @@ describe("groupService", () => {
     expect(secondJoin.group).not.toHaveProperty("inviteCodeHash");
     const members = await repo.listGroupMembers(created.group.id);
     expect(members.map((member) => member.userId).sort()).toEqual([ada.id, grace.id].sort());
+  });
+
+  it("lists groups the user belongs to without exposing invite hashes", async () => {
+    const repo = new MemoryRepository();
+    await repo.upsertProfile(ada);
+    await repo.upsertProfile(grace);
+    const first = await createGroup({
+      repo,
+      userId: ada.id,
+      name: "Friday Builders",
+      timezone: "UTC",
+      now,
+      inviteCode: "first-secret"
+    });
+    const second = await createGroup({
+      repo,
+      userId: grace.id,
+      name: "Weekend Builders",
+      timezone: "UTC",
+      now: "2026-05-08T13:00:00.000Z",
+      inviteCode: "second-secret"
+    });
+    await joinGroup({ repo, userId: ada.id, inviteCode: "second-secret", now: "2026-05-08T14:00:00.000Z" });
+
+    const result = await listGroups({ repo, userId: ada.id });
+
+    expect(result.groups.map((group) => group.name)).toEqual([first.group.name, second.group.name]);
+    for (const group of result.groups) {
+      expect(group).not.toHaveProperty("inviteCodeHash");
+    }
   });
 
   it("keeps the owner role when the owner joins by invite", async () => {

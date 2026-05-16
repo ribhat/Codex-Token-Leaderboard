@@ -21,6 +21,11 @@ type JoinGroupArgs = {
   now: string;
 };
 
+type ListGroupsArgs = {
+  repo: AppRepository;
+  userId: UserId;
+};
+
 function toPublicGroup(group: Group): PublicGroup {
   const { inviteCodeHash: _inviteCodeHash, ...publicGroup } = group;
   return publicGroup;
@@ -44,6 +49,11 @@ export async function createGroup(args: CreateGroupArgs): Promise<{ group: Publi
   });
 
   return { group: toPublicGroup(group), inviteCode };
+}
+
+export async function listGroups(args: ListGroupsArgs): Promise<{ groups: PublicGroup[] }> {
+  const groups = await args.repo.listGroupsForUser(args.userId);
+  return { groups: groups.map(toPublicGroup) };
 }
 
 export async function joinGroup(args: JoinGroupArgs): Promise<{ group: PublicGroup }> {

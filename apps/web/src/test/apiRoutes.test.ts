@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST as createDevicePost } from "@/app/api/collector/devices/route";
 import { POST as syncPost } from "@/app/api/collector/sync/route";
-import { POST as createGroupPost } from "@/app/api/groups/route";
+import { GET as listGroupsGet, POST as createGroupPost } from "@/app/api/groups/route";
 import { POST as joinGroupPost } from "@/app/api/groups/join/route";
 import { GET as leaderboardGet } from "@/app/api/groups/[id]/leaderboard/route";
 import { createCollectorDevice, syncUsage } from "@/lib/collectorService";
-import { createGroup, joinGroup } from "@/lib/groupService";
+import { createGroup, joinGroup, listGroups } from "@/lib/groupService";
 import { getLeaderboard } from "@/lib/leaderboardService";
 
 const mocks = vi.hoisted(() => ({
@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   createSupabaseServiceClient: vi.fn(),
   SupabaseRepository: vi.fn(),
   createGroup: vi.fn(),
+  listGroups: vi.fn(),
   joinGroup: vi.fn(),
   getLeaderboard: vi.fn(),
   createCollectorDevice: vi.fn(),
@@ -32,6 +33,7 @@ vi.mock("@/lib/supabaseRepository", () => ({
 
 vi.mock("@/lib/groupService", () => ({
   createGroup: mocks.createGroup,
+  listGroups: mocks.listGroups,
   joinGroup: mocks.joinGroup
 }));
 
@@ -90,6 +92,39 @@ describe("api route adapters", () => {
     );
   });
 
+  it("lists the signed-in user's groups with dashboard auth", async () => {
+    mocks.listGroups.mockResolvedValue({
+      groups: [
+        {
+          id: "group-1",
+          name: "Builders",
+          creatorId: "user-1",
+          timezone: "UTC",
+          createdAt: "2026-05-08T12:00:00.000Z"
+        }
+      ]
+    });
+
+    const response = await listGroupsGet(new Request("http://localhost/api/groups"));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      groups: [
+        {
+          id: "group-1",
+          name: "Builders",
+          creatorId: "user-1",
+          timezone: "UTC",
+          createdAt: "2026-05-08T12:00:00.000Z"
+        }
+      ]
+    });
+    expect(listGroups).toHaveBeenCalledWith({
+      repo: mocks.repo,
+      userId: "user-1"
+    });
+  });
+
   it("joins groups with dashboard auth and returns the public group shape", async () => {
     mocks.joinGroup.mockResolvedValue({
       group: {
@@ -143,6 +178,16 @@ describe("api route adapters", () => {
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({ error: "Authentication is required" });
     expect(createGroup).not.toHaveBeenCalled();
+  });
+
+  it("returns 401 for unauthenticated group list requests", async () => {
+    mocks.getUserIdFromRequest.mockRejectedValue(new Error("Authentication is required"));
+
+    const response = await listGroupsGet(new Request("http://localhost/api/groups"));
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: "Authentication is required" });
+    expect(listGroups).not.toHaveBeenCalled();
   });
 
   it("returns 401 for unauthenticated group join requests", async () => {

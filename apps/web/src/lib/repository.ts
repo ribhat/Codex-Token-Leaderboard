@@ -31,6 +31,7 @@ export type AppRepository = {
   upsertProfile(profile: Profile): Promise<Profile>;
   createGroup(input: CreateGroupInput): Promise<Group>;
   createGroupWithOwner(input: CreateGroupInput): Promise<Group>;
+  listGroupsForUser(userId: UserId): Promise<Group[]>;
   getGroup(groupId: GroupId): Promise<Group | null>;
   getGroupByInviteHash(inviteCodeHash: string): Promise<Group | null>;
   addGroupMember(member: GroupMember): Promise<GroupMember>;

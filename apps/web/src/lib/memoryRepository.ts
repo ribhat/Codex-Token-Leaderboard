@@ -73,6 +73,19 @@ export class MemoryRepository implements AppRepository {
     return group;
   }
 
+  async listGroupsForUser(userId: string) {
+    return Array.from(this.members.values())
+      .filter((member) => member.userId === userId)
+      .sort((a, b) => a.joinedAt.localeCompare(b.joinedAt))
+      .map((member) => {
+        const group = this.groups.get(member.groupId);
+        if (!group) {
+          throw new Error(`Missing group for ${member.groupId}`);
+        }
+        return clone(group);
+      });
+  }
+
   async getGroup(groupId: string) {
     const group = this.groups.get(groupId);
     return group ? clone(group) : null;

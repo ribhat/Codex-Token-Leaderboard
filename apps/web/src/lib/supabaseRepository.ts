@@ -52,6 +52,10 @@ type GroupMemberWithProfileRow = GroupMemberRow & {
   profiles: ProfileRow | ProfileRow[] | null;
 };
 
+type GroupMemberWithGroupRow = Pick<GroupMemberRow, "joined_at"> & {
+  groups: GroupRow | GroupRow[] | null;
+};
+
 type CollectorDeviceRow = {
   id: string;
   user_id: string;
@@ -190,6 +194,14 @@ function profileFromJoin(row: GroupMemberWithProfileRow) {
   return profile;
 }
 
+function groupFromJoin(row: GroupMemberWithGroupRow) {
+  const group = Array.isArray(row.groups) ? row.groups[0] : row.groups;
+  if (!group) {
+    throw new Error("Missing group for membership");
+  }
+  return group;
+}
+
 function dedupeUsageRows(userId: UserId, rows: UsageAggregateInput[], now: string) {
   const upsertRows = new Map<string, UsageDailyUpsertRow>();
 
@@ -280,6 +292,16 @@ export class SupabaseRepository implements AppRepository {
       .maybeSingle()) as SupabaseResult<GroupRow | null>;
     throwIfError(error);
     return data ? mapGroup(data) : null;
+  }
+
+  async listGroupsForUser(userId: string) {
+    const { data, error } = (await this.supabase
+      .from("group_members")
+      .select("joined_at,groups(id,name,creator_id,invite_code_hash,timezone,created_at)")
+      .eq("user_id", userId)
+      .order("joined_at", { ascending: true })) as SupabaseResult<GroupMemberWithGroupRow[]>;
+    throwIfError(error);
+    return data.map((row) => mapGroup(groupFromJoin(row)));
   }
 
   async getGroupByInviteHash(inviteCodeHash: string) {
