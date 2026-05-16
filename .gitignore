@@ -1,2 +1,14 @@
 .worktrees/
+node_modules/
+.next/
+out/
+coverage/
+.env
+.env.local
+.env.*.local
+dist/
+bin/
+.tools/
+*.exe
+*.test
 .superpowers/

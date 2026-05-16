@@ -1,0 +1,4 @@
+{"timestamp":"2026-05-08T23:30:00-07:00","session_id":"session-forbidden-001","title":"Forbidden planning title","cwd":"C:\\Users\\rbhat\\Secret Project","repo_path":"C:\\Users\\rbhat\\Secret Repo","payload":{"type":"event_msg","prompt":"forbidden prompt text","message":{"content":"forbidden conversation text"},"info":{"last_token_usage":{"total_tokens":100,"input_tokens":60,"cached_input_tokens":20,"output_tokens":40,"reasoning_output_tokens":7}}}}
+{"timestamp":"2026-05-09T01:15:00Z","payload":{"info":{"last_token_usage":{"total_tokens":50,"input_tokens":30,"cached_input_tokens":5,"output_tokens":20,"reasoning_output_tokens":2}}}}
+{"timestamp":"2026-05-09T03:00:00Z","payload":{"info":{"note":"no usage here"}}}
+{"payload":{"info":{"last_token_usage":{"total_tokens":999,"input_tokens":999,"cached_input_tokens":999,"output_tokens":999,"reasoning_output_tokens":999}}}}

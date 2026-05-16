@@ -1,0 +1,14 @@
+{
+  "name": "codex-token-leaderboard",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "packages/db"
+  ],
+  "scripts": {
+    "test": "npm.cmd run test --workspace apps/web",
+    "test:web": "npm.cmd run test --workspace apps/web",
+    "lint:web": "npm.cmd run lint --workspace apps/web",
+    "test:collector": "cd collector && go test ./..."
+  }
+}

@@ -28,11 +28,12 @@ Create these database files:
 Create these web files:
 
 - `apps/web/package.json`: Next.js app dependencies and scripts.
+- `apps/web/next-env.d.ts`: Next.js generated environment types.
 - `apps/web/next.config.ts`: Next.js config.
 - `apps/web/tsconfig.json`: TypeScript config.
 - `apps/web/vitest.config.ts`: Vitest config.
 - `apps/web/src/app/layout.tsx`: root HTML layout.
-- `apps/web/src/app/page.tsx`: dashboard page.
+- `apps/web/src/app/page.tsx`: Task 1 scaffold page; Task 8 replaces it with the dashboard shell.
 - `apps/web/src/app/globals.css`: application styles.
 - `apps/web/src/app/api/groups/route.ts`: `POST /api/groups`.
 - `apps/web/src/app/api/groups/join/route.ts`: `POST /api/groups/join`.
@@ -55,13 +56,14 @@ Create these web files:
 - `apps/web/src/test/groupService.test.ts`: group service tests.
 - `apps/web/src/test/collectorService.test.ts`: collector service tests.
 - `apps/web/src/test/leaderboardService.test.ts`: range, masking, and stale tests.
+- `apps/web/src/test/page.test.tsx`: Task 1 scaffold smoke test.
 - `apps/web/src/test/Dashboard.test.tsx`: basic UI tests.
 - `apps/web/src/test/testData.ts`: reusable fixtures.
 
 Create these collector files:
 
 - `collector/go.mod`: Go module metadata.
-- `collector/main.go`: CLI entry point.
+- `collector/main.go`: Task 1 stdlib-only CLI placeholder; Task 10 wires it to Cobra commands.
 - `collector/internal/config/config.go`: local config read/write.
 - `collector/internal/codex/events.go`: JSONL event parser.
 - `collector/internal/codex/discover.go`: Codex session discovery.
@@ -88,12 +90,15 @@ Create these collector files:
 - Create: `.gitignore`
 - Create: `README.md`
 - Create: `apps/web/package.json`
+- Create: `apps/web/next-env.d.ts`
 - Create: `apps/web/next.config.ts`
 - Create: `apps/web/tsconfig.json`
 - Create: `apps/web/vitest.config.ts`
 - Create: `apps/web/src/app/layout.tsx`
 - Create: `apps/web/src/app/page.tsx`
 - Create: `apps/web/src/app/globals.css`
+- Create: `apps/web/src/test/setup.ts`
+- Create: `apps/web/src/test/page.test.tsx`
 - Create: `collector/go.mod`
 - Create: `collector/main.go`
 
@@ -132,6 +137,7 @@ dist/
 bin/
 *.exe
 *.test
+.worktrees/
 .superpowers/
 ```
 
@@ -180,7 +186,7 @@ Write `apps/web/package.json`:
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "lint": "next lint",
+    "lint": "tsc --noEmit --incremental false",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -205,6 +211,17 @@ Write `apps/web/package.json`:
     "jsdom": "latest"
   }
 }
+```
+
+Write `apps/web/next-env.d.ts`:
+
+```ts
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+import "./.next/types/routes.d.ts";
+
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.
 ```
 
 Write `apps/web/next.config.ts`:
@@ -233,14 +250,14 @@ Write `apps/web/tsconfig.json`:
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "incremental": true,
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", ".next/dev/types/**/*.ts"],
   "exclude": ["node_modules"]
 }
 ```
@@ -295,11 +312,30 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 Write `apps/web/src/app/page.tsx`:
 
 ```tsx
-import { Dashboard } from "@/components/Dashboard";
-
 export default function HomePage() {
-  return <Dashboard />;
+  return (
+    <main>
+      <h1>Codex Token Leaderboard</h1>
+      <p>Privacy-first friend leaderboard for local Codex token usage.</p>
+    </main>
+  );
 }
+```
+
+Write `apps/web/src/test/page.test.tsx`:
+
+```tsx
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import HomePage from "../app/page";
+
+describe("HomePage", () => {
+  it("renders the scaffold title", () => {
+    render(<HomePage />);
+
+    expect(screen.getByRole("heading", { name: "Codex Token Leaderboard" })).toBeInTheDocument();
+  });
+});
 ```
 
 Write `apps/web/src/app/globals.css`:
@@ -381,16 +417,10 @@ Write `collector/main.go`:
 ```go
 package main
 
-import (
-	"os"
-
-	"github.com/codex-token-leaderboard/collector/internal/cmd"
-)
+import "fmt"
 
 func main() {
-	if err := cmd.Execute(); err != nil {
-		os.Exit(1)
-	}
+	fmt.Println("codex-token-leaderboard collector scaffold")
 }
 ```
 
@@ -405,6 +435,8 @@ go mod tidy
 ```
 
 Expected: dependency installation succeeds and creates `package-lock.json` plus `collector/go.sum`.
+
+Note: `collector/main.go` remains stdlib-only in Task 1 so the repository compiles before `collector/internal/cmd` exists. Task 10 introduces Cobra command imports and may refresh `collector/go.sum`.
 
 - [ ] **Step 5: Commit scaffold**
 
@@ -757,6 +789,11 @@ export class MemoryRepository implements AppRepository {
   }
 
   async addGroupMember(member: GroupMember) {
+    const existing = this.members.get(`${member.groupId}:${member.userId}`);
+    if (existing) {
+      return existing;
+    }
+
     this.members.set(`${member.groupId}:${member.userId}`, member);
     return member;
   }
@@ -943,7 +980,10 @@ describe("groupService", () => {
     expect(result.group.name).toBe("Friday Builders");
     expect(result.inviteCode).toBe("invite-secret");
     await expect(repo.isGroupMember(result.group.id, ada.id)).resolves.toBe(true);
-    expect(result.group.inviteCodeHash).toBe(await hashToken("invite-secret"));
+    expect(result.group).not.toHaveProperty("inviteCodeHash");
+    await expect(repo.getGroup(result.group.id)).resolves.toMatchObject({
+      inviteCodeHash: await hashToken("invite-secret")
+    });
   });
 
   it("joins a group by invite code idempotently", async () => {
@@ -1003,6 +1043,10 @@ export async function hashToken(token: string) {
 }
 
 export async function tokenMatches(token: string, expectedHash: string) {
+  if (!/^[a-f0-9]{64}$/i.test(expectedHash)) {
+    return false;
+  }
+
   const actual = Buffer.from(await hashToken(token), "hex");
   const expected = Buffer.from(expectedHash, "hex");
   return actual.length === expected.length && timingSafeEqual(actual, expected);
@@ -1017,6 +1061,8 @@ Write `apps/web/src/lib/groupService.ts`:
 import { generateToken, hashToken } from "./crypto";
 import type { AppRepository } from "./repository";
 import type { Group, UserId } from "./types";
+
+export type PublicGroup = Omit<Group, "inviteCodeHash">;
 
 type CreateGroupArgs = {
   repo: AppRepository;
@@ -1034,7 +1080,12 @@ type JoinGroupArgs = {
   now: string;
 };
 
-export async function createGroup(args: CreateGroupArgs): Promise<{ group: Group; inviteCode: string }> {
+function toPublicGroup(group: Group): PublicGroup {
+  const { inviteCodeHash: _inviteCodeHash, ...publicGroup } = group;
+  return publicGroup;
+}
+
+export async function createGroup(args: CreateGroupArgs): Promise<{ group: PublicGroup; inviteCode: string }> {
   const trimmedName = args.name.trim();
   if (!trimmedName) {
     throw new Error("Group name is required");
@@ -1061,10 +1112,10 @@ export async function createGroup(args: CreateGroupArgs): Promise<{ group: Group
     joinedAt: args.now
   });
 
-  return { group, inviteCode };
+  return { group: toPublicGroup(group), inviteCode };
 }
 
-export async function joinGroup(args: JoinGroupArgs): Promise<{ group: Group }> {
+export async function joinGroup(args: JoinGroupArgs): Promise<{ group: PublicGroup }> {
   const inviteCode = args.inviteCode.trim();
   if (!inviteCode) {
     throw new Error("Invite code is required");
@@ -1087,7 +1138,7 @@ export async function joinGroup(args: JoinGroupArgs): Promise<{ group: Group }> 
     joinedAt: args.now
   });
 
-  return { group };
+  return { group: toPublicGroup(group) };
 }
 ```
 
@@ -1145,8 +1196,9 @@ describe("collectorService", () => {
     });
 
     expect(result.token).toBe("plain-device-token");
-    expect(result.device.tokenHash).toBe(await hashToken("plain-device-token"));
-    expect(result.device.tokenHash).not.toBe("plain-device-token");
+    expect("tokenHash" in result.device).toBe(false);
+    expect(Array.from(repo.devices.values())[0].tokenHash).toBe(await hashToken("plain-device-token"));
+    expect(Array.from(repo.devices.values())[0].tokenHash).not.toBe("plain-device-token");
   });
 
   it("rejects missing, invalid, and revoked collector tokens", async () => {
@@ -1226,6 +1278,8 @@ import { generateToken, hashToken } from "./crypto";
 import type { AppRepository } from "./repository";
 import type { CollectorDevice, UsageAggregateInput, UserId } from "./types";
 
+export type PublicCollectorDevice = Omit<CollectorDevice, "tokenHash">;
+
 type CreateCollectorDeviceArgs = {
   repo: AppRepository;
   userId: UserId;
@@ -1242,9 +1296,21 @@ type SyncUsageArgs = {
   now: string;
 };
 
+function toPublicCollectorDevice(device: CollectorDevice): PublicCollectorDevice {
+  return {
+    id: device.id,
+    userId: device.userId,
+    platform: device.platform,
+    deviceLabel: device.deviceLabel,
+    lastSeenAt: device.lastSeenAt,
+    revokedAt: device.revokedAt,
+    createdAt: device.createdAt
+  };
+}
+
 export async function createCollectorDevice(
   args: CreateCollectorDeviceArgs
-): Promise<{ device: CollectorDevice; token: string }> {
+): Promise<{ device: PublicCollectorDevice; token: string }> {
   const profile = await args.repo.getProfile(args.userId);
   if (!profile) {
     throw new Error("Profile is required");
@@ -1255,7 +1321,11 @@ export async function createCollectorDevice(
     throw new Error("Platform is required");
   }
 
-  const token = args.token ?? generateToken();
+  const token = args.token?.trim() ?? generateToken();
+  if (!token) {
+    throw new Error("Collector token is required");
+  }
+
   const device = await args.repo.createCollectorDevice({
     userId: args.userId,
     tokenHash: await hashToken(token),
@@ -1264,12 +1334,20 @@ export async function createCollectorDevice(
     now: args.now
   });
 
-  return { device, token };
+  return { device: toPublicCollectorDevice(device), token };
 }
 
 export async function syncUsage(args: SyncUsageArgs) {
   const bearerToken = args.bearerToken.trim();
   if (!bearerToken) {
+    await args.repo.createSyncEvent({
+      deviceId: null,
+      userId: null,
+      success: false,
+      message: "Collector token is required",
+      daysSynced: 0,
+      createdAt: args.now
+    });
     throw new Error("Collector token is required");
   }
 
@@ -1310,7 +1388,7 @@ export async function syncUsage(args: SyncUsageArgs) {
     userId: device.userId,
     success: true,
     message: "Sync complete",
-    daysSynced: rows.length,
+    daysSynced: upserted.length,
     createdAt: args.now
   });
 
@@ -1512,10 +1590,13 @@ export type LeaderboardRow = {
   displayName: string;
   avatarUrl: string | null;
   totalTokens: number | null;
-  rawTotalTokens: number;
   isExactTotalHidden: boolean;
   lastSyncedAt: string | null;
   isStale: boolean;
+};
+
+type SortableLeaderboardRow = LeaderboardRow & {
+  rawTotalTokens: number;
 };
 
 type GetLeaderboardArgs = {
@@ -1546,7 +1627,7 @@ export async function getLeaderboard(args: GetLeaderboardArgs): Promise<{ rows: 
 
   return {
     rows: members
-      .map((member) => {
+      .map<SortableLeaderboardRow>((member) => {
         const rawTotalTokens = totals.get(member.userId) ?? 0;
         const lastSyncedAt = latestSeenByUser.get(member.userId) ?? null;
         return {
@@ -1562,7 +1643,10 @@ export async function getLeaderboard(args: GetLeaderboardArgs): Promise<{ rows: 
         };
       })
       .sort((a, b) => b.rawTotalTokens - a.rawTotalTokens || a.displayName.localeCompare(b.displayName))
-      .map((row, index) => ({ ...row, rank: index + 1 }))
+      .map((row, index) => {
+        const { rawTotalTokens: _rawTotalTokens, ...publicRow } = row;
+        return { ...publicRow, rank: index + 1 };
+      })
   };
 }
 ```
@@ -1788,17 +1872,25 @@ export class SupabaseRepository implements AppRepository {
   }
 
   async addGroupMember(member: GroupMember) {
+    const { data: existing, error: existingError } = await this.supabase
+      .from("group_members")
+      .select("*")
+      .eq("group_id", member.groupId)
+      .eq("user_id", member.userId)
+      .maybeSingle();
+    assertNoError(existingError);
+    if (existing) {
+      return mapMember(existing);
+    }
+
     const { data, error } = await this.supabase
       .from("group_members")
-      .upsert(
-        {
-          group_id: member.groupId,
-          user_id: member.userId,
-          role: member.role,
-          joined_at: member.joinedAt
-        },
-        { onConflict: "group_id,user_id" }
-      )
+      .insert({
+        group_id: member.groupId,
+        user_id: member.userId,
+        role: member.role,
+        joined_at: member.joinedAt
+      })
       .select("*")
       .single();
     assertNoError(error);
@@ -1986,7 +2078,7 @@ For `apps/web/src/app/api/groups/join/route.ts`, call `joinGroup` with `body.inv
 
 For `apps/web/src/app/api/groups/[id]/leaderboard/route.ts`, read `params.id` and `new URL(request.url).searchParams.get("range")`, default range to `today`, reject values outside `today`, `week`, `month`, `year`, and `all`, then call `getLeaderboard`.
 
-For `apps/web/src/app/api/collector/devices/route.ts`, call `createCollectorDevice` with `body.platform` and `body.deviceLabel ?? null`.
+For `apps/web/src/app/api/collector/devices/route.ts`, call `createCollectorDevice` with `body.platform` and `body.deviceLabel ?? null`. Return the service result directly; its `device` is a public DTO and must not serialize `tokenHash`.
 
 For `apps/web/src/app/api/collector/sync/route.ts`, do not use dashboard auth. Extract `Authorization: Bearer <device_token>`, parse `{ rows: UsageAggregateInput[] }`, and call `syncUsage`.
 
@@ -2029,6 +2121,7 @@ git commit -m "feat: add supabase api routes"
 - Create: `apps/web/src/components/Leaderboard.tsx`
 - Create: `apps/web/src/components/CollectorSetup.tsx`
 - Create: `apps/web/src/test/Dashboard.test.tsx`
+- Modify: `apps/web/src/app/page.tsx`
 - Modify: `apps/web/src/app/globals.css`
 
 - [ ] **Step 1: Write failing dashboard UI tests**
@@ -2215,6 +2308,16 @@ export function Dashboard() {
       <Leaderboard activeRange={range} onRangeChange={setRange} />
     </main>
   );
+}
+```
+
+Replace `apps/web/src/app/page.tsx` with:
+
+```tsx
+import { Dashboard } from "@/components/Dashboard";
+
+export default function HomePage() {
+  return <Dashboard />;
 }
 ```
 
@@ -2898,6 +3001,24 @@ var statusCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(statusCmd)
+}
+```
+
+Replace `collector/main.go` with:
+
+```go
+package main
+
+import (
+	"os"
+
+	"github.com/codex-token-leaderboard/collector/internal/cmd"
+)
+
+func main() {
+	if err := cmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }
 ```
 
